@@ -1,0 +1,351 @@
+
+########################################################################################################################
+# Opgave 4.1 – Illustration af forbrugertillid 1996–i dag
+########################################################################################################################
+
+# 1) Udtræk forbrugertillidsindikatoren fra 1996M01 og omregn til kvartaler
+forv_4_1 <- df_wide %>%
+  filter(KVT >= "1990M01") %>%
+  mutate(
+    Forbrugertillidsindikatoren = suppressWarnings(
+      as.numeric(gsub(",", ".", Forbrugertillidsindikatoren))
+    ),
+    date = ym(gsub("M", "-", KVT)),
+    kvartal = as.yearqtr(date)
+  ) %>%
+  group_by(kvartal) %>%
+  summarise(
+    Forbrugertillidsindikatoren = mean(Forbrugertillidsindikatoren, na.rm = TRUE),
+    .groups = "drop"
+  ) %>%
+  mutate(
+    KVT = gsub(" ", "", gsub("Q", "K", format(kvartal))),
+    dato_q = as.Date(kvartal)
+  )
+
+unique(forv_4_1$KVT)
+
+forv_4_1 <- forv_4_1[forv_4_1$KVT != "2025K4", ]
+
+# 2) Grafisk illustration af forbrugertillidsindikatoren (kvartalsniveau)
+ggplot(forv_4_1, aes(x = dato_q, y = Forbrugertillidsindikatoren)) +
+  geom_line() +
+  geom_hline(yintercept = 0, linetype = "dashed") +
+  labs(
+    title = "Fra 2005K1 til 2025K1 falder DST’s forbrugertillid markant, hvor politisk usikkerhed presser indikatoren ned under niveauet fra finanskrisen.",
+    x = "År",
+    y = "Nettotal (forbrugertillid)"
+  ) +
+  scale_x_date(date_breaks = "2 years", date_labels = "%Y") +
+  theme_minimal() +
+  theme(
+    axis.text.x = element_text(angle = 45, hjust = 1, size = 12),
+    plot.title = element_text(face = "bold", size = 15)
+  )
+
+# 3) Identifikation af perioder med højeste og laveste forbrugertillid
+top_optimistic <- forv_4_1 %>%
+  arrange(desc(Forbrugertillidsindikatoren)) %>%
+  head(5)
+
+bottom_pessimistic <- forv_4_1 %>%
+  arrange(Forbrugertillidsindikatoren) %>%
+  head(5)
+
+
+########################################################################################################################
+# Opgave 4.2 – Gennemsnit for 
+# "Anskaffelse af større forbrugsgoder, fordelagtigt"
+# Periode: 2000K1 – 2024K3
+########################################################################################################################
+
+forbrugsgoder_gns <- forv_q %>%
+  filter(KVT >= "2000K1", KVT <= "2024K3") %>%
+  summarise(
+    gennemsnit = mean(`Anskaffelse af større forbrugsgoder, idag`, na.rm = TRUE),
+    antal_kvartaler = n()
+  )
+
+forbrugsgoder_gns
+
+
+########################################################################################################################
+# Opgave 4.3 – Husholdningernes forbrug fordelt på 11 forbrugsgrupper 
+########################################################################################################################
+
+########################################################
+# 1) Metadata til NKHC021
+########################################################
+
+meta_nkhc <- dst_meta("NKHC021", lang = "da")
+
+# Oversigt over variabler
+meta_nkhc$variables  
+
+########################################################
+# 2) Valg af værdier til query
+########################################################
+
+# 11 grupper (formål med forbrug)
+grupper_txt <- meta_nkhc$values$FORMAAAL$text
+
+# 2020-priser, kædede værdier
+prisenhed_txt <- meta_nkhc$values$PRISENHED$text[
+  grepl("2020-priser, kædede værdier", meta_nkhc$values$PRISENHED$text)
+]
+
+# Sæsonkorrigerede serier
+saeson_txt <- meta_nkhc$values$SÆSON$text[
+  grepl("Sæsonkorrigeret", meta_nkhc$values$SÆSON$text)
+]
+
+# TID vælges som "*" for at kunne afgrænse perioden efterfølgende
+query_nkhc <- list(
+  FORMAAAL = grupper_txt,
+  PRISENHED = prisenhed_txt,
+  SÆSON = saeson_txt,
+  TID = "*"
+)
+
+########################################################
+# 3) Dataudtræk
+########################################################
+
+nkhc_raw <- dst_get_data(
+  table = "NKHC021",
+  query = query_nkhc,
+  lang = "da",
+  meta_data = meta_nkhc
+) %>%
+  as_tibble()
+
+########################################################
+# 4) Filtrering til 2020–2025 og beregning af årsgennemsnit
+########################################################
+
+nkhc_2020_2024 <- nkhc_raw %>%
+  mutate(
+    aar = substr(TID, 1, 4)
+  ) %>%
+  filter(aar %in% c("2020","2021","2022","2023","2024"))
+
+# Årligt gennemsnit pr. forbrugsgruppe
+nkhc_year_mean <- nkhc_2020_2024 %>%
+  group_by(FORMAAAL, aar) %>%
+  summarise(
+    value_mean = mean(value, na.rm = TRUE),
+    .groups = "drop"
+  ) %>%
+  pivot_wider(
+    names_from = aar,
+    values_from = value_mean,
+    names_prefix = "y"
+  ) %>%
+  filter(FORMAAAL != "CPT I alt") # totalen udelades
+
+########################################################
+# 5) Besvarelse af 4.3
+########################################################
+
+# 1) Største gennemsnitlige forbrug i 2024
+top_2024 <- nkhc_year_mean %>%
+  arrange(desc(y2024)) %>%
+  slice(1)
+
+top_2024
+
+# 2) Største stigning i forbrug 2020–2025
+growth_2020_2024 <- nkhc_year_mean %>%
+  mutate(stigning_2020_2024 = y2024 - y2020) %>%
+  arrange(desc(stigning_2020_2024))
+
+top_growth <- growth_2020_2024 %>%
+  slice(1)
+
+top_growth
+
+## opgave 4.4
+
+library(dplyr)
+
+forbrug_q <- nkhc_raw %>%
+  mutate(
+    # Lav samme kvartalskode som i analysis_df: "XÅÅÅÅKq"
+    Kvartal = paste0(
+      "X",
+      format(TID, "%Y"),
+      gsub("Q", "K", quarters(TID))
+    )
+  ) %>%
+  filter(
+    PRISENHED == "2020-priser, kædede værdier",
+    SÆSON == "Sæsonkorrigeret",
+    FORMAAAL != "CPT I alt",
+    Kvartal >= "X2000K1",
+    Kvartal <= "X2025K3"
+  ) %>%
+  select(
+    Kvartal,
+    FORMAAAL,
+    Forbrug = value
+  )
+
+fti_q <- analysis_df %>%
+  select(Kvartal, DST_FTI, DI_FTI)
+
+reg_df <- forbrug_q %>%
+  left_join(fti_q, by = "Kvartal")
+
+
+# 11 grupper
+
+grupper <- unique(reg_df$FORMAAAL)
+
+  
+# 2 tommelister
+
+models_DST <- list()
+models_DI  <- list()
+
+# loop
+
+for (g in grupper) {
+  
+  df_g <- reg_df[reg_df$FORMAAAL == g, ]   # vælg én gruppe
+  
+  models_DST[[g]] <- summary(lm(Forbrug ~ DST_FTI, data = df_g))
+  models_DI[[g]]  <- summary(lm(Forbrug ~ DI_FTI,  data = df_g))
+  
+}
+
+models_DST[[1]]
+
+models_DI[["Fritidsudstyr og kultur"]] 
+
+
+names(reg_df)
+unique(reg_df$FORMAAAL)
+
+
+forbrug_q <- nkhc_raw %>%
+  mutate(
+    Kvartal = paste0(
+      "X",
+      substr(TID, 1, 4),
+      "K",
+      ceiling(as.numeric(substr(TID, 6, 6)) / 3)
+    )
+  ) %>%
+  filter(Kvartal >= "X2000K1", Kvartal <= "X2025K3") %>%
+  group_by(FORMAAAL, Kvartal) %>%
+  summarise(
+    Forbrug = mean(value, na.rm = TRUE),
+    .groups = "drop"
+  )
+
+
+reg_df <- forbrug_q %>%
+  left_join(
+    analysis_df %>% select(Kvartal, DST_FTI, DI_FTI),
+    by = "Kvartal"
+  )
+
+
+
+reg_df <- reg_df %>%
+  filter(Kvartal >= "X2000K1", Kvartal <= "X2025K3")
+
+# fjern toal
+reg_df <- reg_df %>%
+  filter(FORMAAAL != "CPT I alt")
+
+# find 11 grupper
+
+grupper <- unique(reg_df$FORMAAAL)
+grupper
+
+
+models_DST <- list()
+models_DI  <- list()
+
+
+for (g in grupper) {
+  
+  df_g <- reg_df %>%
+    filter(FORMAAAL == g)
+  
+  # DST-model
+  models_DST[[g]] <- lm(Forbrug ~ DST_FTI, data = df_g)
+  
+  # DI-model
+  models_DI[[g]] <- lm(Forbrug ~ DI_FTI, data = df_g)
+}
+
+length(models_DST)
+length(models_DI)
+
+
+summary(models_DI[["CPK Fritid, sport og kultur"]])
+
+
+resultater <- data.frame(
+  Gruppe = grupper,
+  R2_DI  = NA,
+  R2_DST = NA
+)
+
+for (i in seq_along(grupper)) {
+  g <- grupper[i]
+  resultater$R2_DI[i]  <- summary(models_DI[[g]])$r.squared
+  resultater$R2_DST[i] <- summary(models_DST[[g]])$r.squared
+}
+
+resultater
+
+
+# 4.4
+
+
+library(dplyr)
+
+# 1) Saml forbrug + forbrugertillid (2000K1–2025K3)
+reg_df <- nkhc_raw %>%
+  mutate(
+    Kvartal = paste0(
+      "X", substr(TID, 1, 4),
+      "K", ceiling(as.numeric(substr(TID, 6, 6)) / 3)
+    )
+  ) %>%
+  filter(
+    Kvartal >= "X2000K1",
+    Kvartal <= "X2025K3",
+    FORMAAAL != "CPT I alt"
+  ) %>%
+  group_by(FORMAAAL, Kvartal) %>%
+  summarise(
+    Forbrug = mean(value, na.rm = TRUE),
+    .groups = "drop"
+  ) %>%
+  left_join(
+    analysis_df %>% select(Kvartal, DI_FTI, DST_FTI),
+    by = "Kvartal"
+  )
+
+# 2) De 11 forbrugsgrupper
+grupper <- unique(reg_df$FORMAAAL)
+
+# 3) 22 simple lineære regressioner (summary gemt i lister)
+models_DI  <- list()
+models_DST <- list()
+
+for (g in grupper) {
+  d <- reg_df %>% filter(FORMAAAL == g)
+  
+  models_DI[[g]]  <- summary(lm(Forbrug ~ DI_FTI,  data = d))
+  models_DST[[g]] <- summary(lm(Forbrug ~ DST_FTI, data = d))
+}
+
+# 4) Eksempel: vis én regression
+models_DI[["CPK Fritid, sport og kultur"]]
+
+
