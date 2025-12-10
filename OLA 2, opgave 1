@@ -1,0 +1,204 @@
+
+###### OLA 2 ######
+
+# OPGAVE 1
+
+# 1.1
+
+library(dkstat)
+
+postnr_data <- dst_get_data(
+  table = "POSTNR2",
+  query = list(
+    PNR20 = "*",    # postnumre
+    KØN   = "*",    # køn
+    ALDER = "*",    # alder
+    Tid   = "2025"  # år
+  ),
+  lang = "da"
+)
+
+head(postnr_data)
+
+
+#1.2
+
+summary(postnr_data$value)
+
+
+table(postnr_data$bytype)
+
+postnr_data$bytype <- cut(
+  postnr_data$value,
+  breaks = c(-Inf, 250, 1000, 2500, 10000, 50000, Inf),
+  labels = c("landsby", "lille by", "almindelig by",
+             "større by", "storby", "meget storby")
+)
+
+table(postnr_data$bytype)
+
+unique(postnr_data$PNR20)
+
+unique(postnr_data$by)[1:30]
+
+colnames(bolig_df_1)
+
+#1.3
+
+bolig_df_1 <- boligcl2
+
+postnr_data$by <- gsub(".*- [0-9]{4} ", "", postnr_data$PNR20)
+postnr_data$by <- gsub("[0-9]", "", postnr_data$by)
+postnr_data$by <- trimws(postnr_data$by)
+
+postnr_clean <- postnr_data[
+  postnr_data$PNR20 != "0001 Hele landet" &
+    postnr_data$ALDER == "IALT Alder i alt",
+]
+
+
+by_tot <- aggregate(
+  value ~ by,
+  data = postnr_clean,
+  sum
+)
+
+colnames(by_tot)[2] <- "indbyggere"
+
+by_tot$bykategori <- cut(
+  by_tot$indbyggere,
+  breaks = c(0, 250, 1000, 2500, 10000, 50000, Inf),
+  labels = c(
+    "landsby",
+    "lille by",
+    "almindelig by",
+    "større by",
+    "stor by",
+    "meget stor by"
+  )
+)
+
+# Gør by_tot$by identisk med zipmunic-format
+by_tot$by <- tolower(by_tot$by)
+by_tot$by <- gsub("æ", "ae", by_tot$by)
+by_tot$by <- gsub("ø", "oe", by_tot$by)
+by_tot$by <- gsub("å", "aa", by_tot$by)
+by_tot$by <- gsub(" ", "", by_tot$by)
+
+
+by_tot$by <- gsub("[0-9]", "", by_tot$by)
+by_tot$by <- trimws(by_tot$by)
+
+boliger <- bolig_df_1
+
+boliger$zipmunic <- tolower(boliger$zipmunic)
+boliger$zipmunic <- trimws(boliger$zipmunic)
+
+# Gør boliger$zipmunic matchende by_tot$by
+boliger$zipmunic <- tolower(boliger$zipmunic)
+boliger$zipmunic <- gsub(" ", "", boliger$zipmunic)
+boliger$zipmunic <- gsub("æ", "ae", boliger$zipmunic)
+boliger$zipmunic <- gsub("ø", "oe", boliger$zipmunic)
+boliger$zipmunic <- gsub("å", "aa", boliger$zipmunic)
+
+
+boliger$zipmunic <- paste0(
+  toupper(substr(boliger$zipmunic, 1, 1)),
+  substr(boliger$zipmunic, 2, nchar(boliger$zipmunic))
+)
+
+boliger$pris_num <- as.numeric(gsub("[^0-9]", "", boliger$pris))
+boliger$pris_kvm <- round(boliger$pris_num / boliger$kvm2, 0)
+
+boliger <- boliger[, c("pris", "zipmunic", "pris_kvm")]
+by_tot  <- by_tot[, c("by", "bykategori")]
+
+intersect(boliger$zipmunic, by_tot$by)[1:10]
+
+
+
+boligdata_merge <- merge(
+  boliger,
+  by_tot,
+  by.x = "zipmunic",
+  by.y = "by",
+  all = FALSE
+)
+
+
+
+##### CHATGPT KODE ######
+
+# 1.3 – Bykategori og merge (simpel version)
+
+# --- By fra DST ---
+postnr_data$by <- gsub(".*- [0-9]{4} ", "", postnr_data$PNR20)
+postnr_data$by <- gsub("[0-9]", "", postnr_data$by)
+postnr_data$by <- trimws(postnr_data$by)
+
+postnr_clean <- postnr_data[
+  postnr_data$PNR20 != "0001 Hele landet" &
+    postnr_data$ALDER == "IALT Alder i alt",
+]
+
+by_tot <- aggregate(value ~ by, postnr_clean, sum)
+names(by_tot)[2] <- "indbyggere"
+
+by_tot$bykategori <- cut(
+  by_tot$indbyggere,
+  c(0, 250, 1000, 2500, 10000, 50000, Inf),
+  c("landsby", "lille by", "almindelig by",
+    "større by", "stor by", "meget stor by")
+)
+
+# --- Ensret bynavne ---
+by_tot$by <- tolower(by_tot$by)
+by_tot$by <- gsub("æ", "ae", by_tot$by)
+by_tot$by <- gsub("ø", "oe", by_tot$by)
+by_tot$by <- gsub("å", "aa", by_tot$by)
+by_tot$by <- gsub(" ", "", by_tot$by)
+
+# --- Boligdata ---
+boliger <- boligcl2
+boliger$zipmunic <- tolower(boliger$zipmunic)
+boliger$zipmunic <- gsub("æ", "ae", boliger$zipmunic)
+boliger$zipmunic <- gsub("ø", "oe", boliger$zipmunic)
+boliger$zipmunic <- gsub("å", "aa", boliger$zipmunic)
+boliger$zipmunic <- gsub(" ", "", boliger$zipmunic)
+
+boliger$pris_kvm <- round(
+  as.numeric(gsub("[^0-9]", "", boliger$pris)) / boliger$kvm2,
+  0
+)
+
+boliger <- boliger[, c("pris", "zipmunic", "pris_kvm")]
+by_tot  <- by_tot[, c("by", "bykategori")]
+
+# --- Merge ---
+boligdata_merge <- merge(
+  boliger,
+  by_tot,
+  by.x = "zipmunic",
+  by.y = "by"
+)
+
+
+### plot ###
+
+df_plot <- aggregate(
+  pris_kvm ~ bykategori,
+  data = boligdata_merge,
+  FUN = mean
+)
+
+library(ggplot2)
+
+ggplot(df_plot, aes(x = bykategori, y = pris_kvm, fill = bykategori)) +
+  geom_col() +
+  labs(
+    x = "Bykategori",
+    y = "Gennemsnitlig kvadratmeterpris",
+    title = "Tydelig sammenhæng mellem bystørrelse og boligpriser") +
+  theme_minimal() +
+  theme(legend.position = "none")
+
