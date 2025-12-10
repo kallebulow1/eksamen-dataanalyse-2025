@@ -1,0 +1,46 @@
+
+
+# 4.4
+## simpel chatgpt kode
+
+library(dplyr)
+
+# 1) Saml forbrug + forbrugertillid (2000K1–2025K3)
+reg_df <- nkhc_raw %>%
+  mutate(
+    Kvartal = paste0(
+      "X", substr(TID, 1, 4),
+      "K", ceiling(as.numeric(substr(TID, 6, 6)) / 3)
+    )
+  ) %>%
+  filter(
+    Kvartal >= "X2000K1",
+    Kvartal <= "X2025K3",
+    FORMAAAL != "CPT I alt"
+  ) %>%
+  group_by(FORMAAAL, Kvartal) %>%
+  summarise(
+    Forbrug = mean(value, na.rm = TRUE),
+    .groups = "drop"
+  ) %>%
+  left_join(
+    analysis_df %>% select(Kvartal, DI_FTI, DST_FTI),
+    by = "Kvartal"
+  )
+
+# 2) De 11 forbrugsgrupper
+grupper <- unique(reg_df$FORMAAAL)
+
+# 3) 22 simple lineære regressioner (summary gemt i lister)
+models_DI  <- list()
+models_DST <- list()
+
+for (g in grupper) {
+  d <- reg_df %>% filter(FORMAAAL == g)
+  
+  models_DI[[g]]  <- summary(lm(Forbrug ~ DI_FTI,  data = d))
+  models_DST[[g]] <- summary(lm(Forbrug ~ DST_FTI, data = d))
+}
+
+# 4) Eksempel: vis én regression
+models_DI[["CPK Fritid, sport og kultur"]]
