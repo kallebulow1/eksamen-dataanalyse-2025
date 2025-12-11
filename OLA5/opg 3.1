@@ -1,0 +1,18 @@
+library(ordinal)
+
+data <- read.csv("data/regnskab-ola5.csv", header=TRUE, sep = ";")
+data$Hvordan.ser.du.mulighederne.for.at.låne.penge.til.din.virksomhed...fiktivt.spørgsmål.[data$Hvordan.ser.du.mulighederne.for.at.låne.penge.til.din.virksomhed...fiktivt.spørgsmål. == "Dårlig"] <- "Dårlige"
+names(data)
+unique(data$Hvordan.ser.du.mulighederne.for.at.låne.penge.til.din.virksomhed...fiktivt.spørgsmål.)
+data <- data[data$Hvordan.ser.du.mulighederne.for.at.låne.penge.til.din.virksomhed...fiktivt.spørgsmål. != "Ved ikke", ]
+data$Hvordan.ser.du.mulighederne.for.at.låne.penge.til.din.virksomhed...fiktivt.spørgsmål. <- factor(
+  data$Hvordan.ser.du.mulighederne.for.at.låne.penge.til.din.virksomhed...fiktivt.spørgsmål.,
+  levels = c("Meget dårlige", "Dårlige", "Neutrale", "Gode", "Meget gode")
+)
+barplot(
+  table(data$Hvordan.ser.du.mulighederne.for.at.låne.penge.til.din.virksomhed...fiktivt.spørgsmål.),
+  col = "lightblue",
+  main = "Fordeling af svar: Muligheder for at låne penge til virksomheder",
+  ylab = "Antal svar",
+  xlab = "Svarmulighed"
+)
