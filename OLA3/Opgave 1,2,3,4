@@ -1,0 +1,910 @@
+################## OLA 3 ################
+
+## 3.1 
+library(dplyr)
+library(zoo)
+
+spm12 <- ftillid_m %>%
+  mutate(
+    year  = as.numeric(substr(ÅrMåned, 2, 5)),
+    month = as.numeric(substr(ÅrMåned, 7, 8)),
+    date  = as.Date(paste(year, month, "01", sep = "-")),
+    kvartal = as.yearqtr(date)
+  )
+
+spm12 <- ftillid_m %>%
+  mutate(
+    year  = as.numeric(substr(ÅrMåned, 2, 5)),
+    month = as.numeric(substr(ÅrMåned, 7, 8)),
+    date  = as.Date(paste(year, month, "01", sep = "-")),
+    kvartal = as.yearqtr(date)
+  ) %>%
+  group_by(kvartal) %>%
+  summarise(
+    Forbrugertillid  = mean(`F1 Forbrugertillidsindikatoren`, na.rm = TRUE),
+    fam_idag  = mean(`F2 Familiens økonomiske situation i dag, sammenlignet med for et år siden`, na.rm = TRUE),
+    fam_år  = mean(`F3 Familiens økonomiske  situation om et år, sammenlignet med i dag`, na.rm = TRUE),
+    dan_idag  = mean(`F4 Danmarks økonomiske situation i dag, sammenlignet med for et år siden`, na.rm = TRUE),
+    dan_år = mean(`F5 Danmarks økonomiske situation om et år, sammenlignet med i dag`, na.rm = TRUE),
+    ansk_fordelag  = mean(`F9 Anskaffelse af større forbrugsgoder, fordelagtigt for øjeblikket`, na.rm = TRUE),
+    prsier_idag  = mean(`F6 Priser i dag, sammenlignet med for et år siden`, na.rm = TRUE),
+    pris_år  = mean(`F7 Priser om et år, sammenlignet med i dag`, na.rm = TRUE),
+    arbejdsløshed_år  = mean(`F8 Arbejdsløsheden om et år, sammenlignet med i dag`, na.rm = TRUE),
+    ansk_12  = mean(`F10 Anskaffelse af større forbrugsgoder, inden for de næste 12 mdr.`, na.rm = TRUE),
+    sparer_op_nu = mean(`F11 Anser det som fornuftigt at spare op i den nuværende økonomiske situation`, na.rm = TRUE),
+    sparer_op_12 = mean(`F12 Regner med at kunne spare op i de kommende 12 måneder`, na.rm = TRUE),
+    fam_sparer_op = mean(`F13 Familiens økonomiske situation lige nu: kan spare/penge slår til/ bruger mere end man tjener`, na.rm = TRUE)
+  ) %>%
+  filter(
+    kvartal >= as.yearqtr("2000 Q1"),
+    kvartal <= as.yearqtr("2025 Q3")
+  ) %>%
+  mutate(
+    Kvartal = paste0(
+      "X", format(kvartal, "%Y"),
+      "K", format(kvartal, "%q")
+    )
+  )
+
+
+
+
+
+# Vælg variabler
+
+dfX <- spm12 %>%
+  select(
+    fam_idag,
+    fam_år,
+    dan_idag,
+    dan_år,
+    ansk_fordelag,
+    prsier_idag,
+    pris_år,
+    arbejdsløshed_år,
+    ansk_12,
+    sparer_op_nu,
+    sparer_op_12,
+    fam_sparer_op
+  )
+
+df12 <- spm12 %>%
+  select(
+    fam_idag,
+    fam_år,
+    dan_idag,
+    dan_år,
+    ansk_fordelag,
+    prsier_idag,
+    pris_år,
+    arbejdsløshed_år,
+    ansk_12,
+    sparer_op_nu,
+    sparer_op_12,
+    fam_sparer_op
+  )
+
+# Gem resultater
+
+# Loop over alle kombinationer
+vars <- names(dfX)    # de 12 spørgsmål
+
+combo_list <- list()  # tom liste
+k <- 1                # tæller
+
+for (i in 1:length(vars)) {
+  cmb <- combn(vars, i)     # kombinationer af størrelse i
+  
+  for (j in 1:ncol(cmb)) {
+    combo_list[[k]] <- cmb[, j]              # gem kombinationen
+    names(combo_list)[k] <- paste(cmb[, j], collapse = "+")  
+    k <- k + 1
+  }
+}
+
+results <- data.frame(
+  model = character(),
+  r2    = numeric(),
+  stringsAsFactors = FALSE
+)
+
+for (i in seq_along(combo_list)) {
+  
+  vars <- combo_list[[i]]             # valgt kombination
+  
+  form <- as.formula(
+    paste("Forbrugertillid ~", paste(vars, collapse = " + "))
+  )
+  
+  fit <- lm(form, data = spm12)       # regression
+  
+  r2 <- summary(fit)$r.squared        # forklaringsgrad
+  
+  results[i, ] <- list(names(combo_list)[i], r2)
+}
+
+results <- results[order(-results$r2), ]
+head(results, 10)
+
+
+spm12$vkst_pct <- vkst_pc
+
+
+#rigtige loop
+vars <- names(df12)
+
+kombinationer <- list()
+k <- 1
+
+for (i in 1:length(vars)) {
+  cmb <- combn(vars, i)
+  for (j in 1:ncol(cmb)) {
+    kombinationer[[k]] <- cmb[, j]
+    names(kombinationer)[k] <- paste(cmb[, j], collapse = " + ")
+    k <- k + 1
+  }
+}
+
+
+
+#### 1.2
+
+# Lav alle kombinationer af DST-spørgsmål
+combo_list <- list()
+k <- 1
+
+for (i in 1:length(vars)) {
+  cmb <- combn(vars, i)
+  for (j in 1:ncol(cmb)) {
+    combo_list[[k]] <- cmb[, j]
+    names(combo_list)[k] <- paste(cmb[, j], collapse = " + ")
+    k <- k + 1
+  }
+}
+
+# Find bedste DST-indikator ift. forbrugsvækst
+results <- data.frame(
+  Indikator = character(),
+  Antal_spørgsmål = numeric(),
+  R2 = numeric(),
+  stringsAsFactors = FALSE
+)
+
+for (i in seq_along(combo_list)) {
+  
+  spg <- combo_list[[i]]
+  
+  indikator <- rowMeans(spm12[, spg], na.rm = TRUE)
+  
+  model <- lm(vkst_pct ~ indikator, data = spm12)
+  r2 <- summary(model)$r.squared
+  
+  results[i, ] <- list(
+    names(combo_list)[i],
+    length(spg),
+    r2
+  )
+}
+
+# Sortér efter højeste R2
+results <- results[order(-results$R2), ]
+head(results, 5)
+
+best_dst <- results[1, ]
+best_dst
+
+comparison <- data.frame(
+  Indikator = c("DI forbrugertillidsindikator", 
+                paste("Bedste DST-indikator:", best_dst$Indikator)),
+  Antal_spørgsmål = c(NA, best_dst$Antal_spørgsmål),
+  R2 = c(0.51, best_dst$R2)
+)
+
+comparison
+
+
+
+
+
+
+## 1.3
+
+
+# Lad os bygge kvartalsdata for de 6 spørgsmål til og med Q4 2025
+
+library(dplyr)
+library(zoo)
+
+# 1) Lav dato og kvartal
+ftillid_m$date <- as.Date(paste0(substr(ftillid_m$ÅrMåned, 2, 5), "-",
+                                 substr(ftillid_m$ÅrMåned, 7, 8), "-01"))
+
+ftillid_m$kvartal <- as.yearqtr(ftillid_m$date)
+
+# 2) De 6 bedste DST-variabler MED rigtige navne
+best_vars_raw <- c(
+  "F4 Danmarks økonomiske situation i dag, sammenlignet med for et år siden",
+  "F9 Anskaffelse af større forbrugsgoder, fordelagtigt for øjeblikket",
+  "F7 Priser om et år, sammenlignet med i dag",
+  "F10 Anskaffelse af større forbrugsgoder, inden for de næste 12 mdr.",
+  "F12 Regner med at kunne spare op i de kommende 12 måneder",
+  "F13 Familiens økonomiske situation lige nu: kan spare/penge slår til/ bruger mere end man tjener"
+)
+
+# 3) Lav kvartalsdata korrekt
+dst_q <- ftillid_m %>%
+  group_by(kvartal) %>%
+  summarise(across(all_of(best_vars_raw), ~ mean(.x, na.rm = TRUE)))
+
+
+
+# STEP 2 — Merge DST-indikatorer med vækstdata
+
+# Lav kvartal i spm12 i samme format som dst_q
+spm12$kvartal <- as.yearqtr(spm12$kvartal)
+
+# Merge på kvartal
+model_df <- merge(dst_q, spm12[, c("kvartal", "vkst_pct")], by = "kvartal")
+
+model_df_clean <- model_df %>%
+  select(
+    kvartal,
+    
+    # De 6 rigtige DST-spørgsmål
+    `F4 Danmarks økonomiske situation i dag, sammenlignet med for et år siden`,
+    `F9 Anskaffelse af større forbrugsgoder, fordelagtigt for øjeblikket`,
+    `F7 Priser om et år, sammenlignet med i dag`,
+    `F10 Anskaffelse af større forbrugsgoder, inden for de næste 12 mdr.`,
+    `F12 Regner med at kunne spare op i de kommende 12 måneder`,
+    `F13 Familiens økonomiske situation lige nu: kan spare/penge slår til/ bruger mere end man tjener`,
+    
+    # y-variabel
+    vkst_pct
+  )
+
+# estimer model
+
+fit <- lm(
+  vkst_pc ~ 
+    `F4 Danmarks økonomiske situation i dag, sammenlignet med for et år siden` +
+    `F9 Anskaffelse af større forbrugsgoder, fordelagtigt for øjeblikket` +
+    `F7 Priser om et år, sammenlignet med i dag` +
+    `F10 Anskaffelse af større forbrugsgoder, inden for de næste 12 mdr.` +
+    `F12 Regner med at kunne spare op i de kommende 12 måneder` +
+    `F13 Familiens økonomiske situation lige nu: kan spare/penge slår til/ bruger mere end man tjener`,
+  data = model_df_clean
+)
+
+summary(fit)$r.squared
+
+
+# Udtræk oktober + november 2025 (Q4-data)
+
+# Udtræk okt og nov 2025
+q4_raw <- ftillid_m %>%
+  filter(ÅrMåned %in% c("X2025M10", "X2025M11"))
+
+
+# Beregn kvartalsgennemsnit for de 6 bedste variabler
+
+q4_values <- q4_raw %>%
+  summarise(
+    F4  = mean(`F4 Danmarks økonomiske situation i dag, sammenlignet med for et år siden`, na.rm=TRUE),
+    F9  = mean(`F9 Anskaffelse af større forbrugsgoder, fordelagtigt for øjeblikket`, na.rm=TRUE),
+    F7  = mean(`F7 Priser om et år, sammenlignet med i dag`, na.rm=TRUE),
+    F10 = mean(`F10 Anskaffelse af større forbrugsgoder, inden for de næste 12 mdr.`, na.rm=TRUE),
+    F12 = mean(`F12 Regner med at kunne spare op i de kommende 12 måneder`, na.rm=TRUE),
+    F13 = mean(`F13 Familiens økonomiske situation lige nu: kan spare/penge slår til/ bruger mere end man tjener`, na.rm=TRUE)
+  )
+
+
+# Lav newdata
+
+# Kopiér strukturen fra model_df_clean
+new_q4 <- model_df_clean[1, ]
+new_q4[,] <- NA
+
+# Indsæt Q4 2025 værdier (fra okt + nov 2025)
+new_q4$`F4 Danmarks økonomiske situation i dag, sammenlignet med for et år siden` <- q4_values$F4
+new_q4$`F9 Anskaffelse af større forbrugsgoder, fordelagtigt for øjeblikket`      <- q4_values$F9
+new_q4$`F7 Priser om et år, sammenlignet med i dag`                               <- q4_values$F7
+new_q4$`F10 Anskaffelse af større forbrugsgoder, inden for de næste 12 mdr.`      <- q4_values$F10
+new_q4$`F12 Regner med at kunne spare op i de kommende 12 måneder`                <- q4_values$F12
+new_q4$`F13 Familiens økonomiske situation lige nu: kan spare/penge slår til/ bruger mere end man tjener` <- q4_values$F13
+
+# Fjern variabler, der ikke er X'er
+new_q4 <- new_q4 %>% select(-kvartal, -vkst_pct)
+
+# Forudsig vækst for 2025k4
+
+pred_2025Q4 <- predict(fit, newdata = new_q4)
+pred_2025Q4
+
+
+new_q1_2026 <- new_q4
+pred_2026Q1 <- predict(fit, newdata = new_q1_2026)
+pred_2026Q1
+
+names(model_df_clean)
+
+summary(fit)$r.squared
+
+
+
+### 1.5
+
+# Mikroøkonomisk indikator (kun husholdningens egen økonomi)
+spm12$mikro_indikator <- rowMeans(
+  spm12[, c(
+    "fam_idag",
+    "fam_år",
+    "ansk_fordelag",
+    "ansk_12",
+    "sparer_op_12",
+    "fam_sparer_op"
+  )],
+  na.rm = TRUE
+)
+
+# Regression: mikro-indikator → forbrugsvækst
+fit_mikro <- lm(vkst_pct ~ mikro_indikator, data = spm12)
+
+# R²
+r2_mikro <- summary(fit_mikro)$r.squared
+r2_mikro
+
+
+comparison_15 <- data.frame(
+  Indikator = c(
+    "DI forbrugertillidsindikator",
+    "Bedste DST-indikator (makro + mikro)",
+    "Mikroøkonomisk indikator"
+  ),
+  Antal_spørgsmål = c(
+    4,      # DI
+    6,      # din bedste DST
+    6       # mikro
+  ),
+  R2 = c(
+    0.51,
+    best_r2,
+    r2_mikro
+  )
+)
+
+comparison_15
+
+
+######### OPGAVE 2 ##########
+install.packages("pls")
+library(pls)
+
+
+pca_df <- spm12 %>%
+  select(
+    vkst_pct,
+    fam_idag,
+    fam_år,
+    dan_idag,
+    dan_år,
+    ansk_fordelag,
+    prsier_idag,
+    pris_år,
+    arbejdsløshed_år,
+    ansk_12,
+    sparer_op_nu,
+    sparer_op_12,
+    fam_sparer_op
+  ) %>%
+  na.omit()
+
+# PCA
+pcr_fit <- pcr(
+  vkst_pct ~ .,
+  data = pca_df,
+  scale = TRUE,        # vigtigt: PCA kræver skalerede variable
+  validation = "CV"    # krydsvalidering
+)
+
+summary(pcr_fit)
+
+
+validationplot(pcr_fit, val.type = "MSEP")
+validationplot(pcr_fit, val.type = "MSEP")
+title("PCA: Hvor mange komponenter forklarer forbruget bedst?")
+validationplot(pcr_fit, val.type = "MSEP", main = "")
+title("PCA: Hvor mange komponenter forklarer forbruget bedst?", cex.main = 1.3)
+
+
+
+loadings(pcr_fit)
+
+pred <- predict(pcr_fit, ncomp = 3, newdata = pca_df)
+cor(pred, pca_df$vkst_pct)^2
+
+## 2.2
+# Loadings fra første PCA-komponent
+w <- loadings(pcr_fit)[, 1]
+
+# Find de 3 højeste vægte
+top3 <- sort(abs(w), decreasing = TRUE)[1:3]
+
+# Vis resultat
+top3
+
+
+
+
+
+######### OPGAVE 3 ##########
+
+DST_tillid_2025_k3 <- -17.2
+
+spm12 <- spm12 %>%
+  arrange(kvartal) %>%
+  mutate(
+    Target = ifelse(vkst_pct > lag(vkst_pct, 4), 1, 0)
+  )
+
+df_ml <- spm12 %>%
+  select(
+    Forbrugertillid_DST = Forbrugertillid,
+    Target
+  ) %>%
+  na.omit()
+
+
+ml_model <- glm(
+  Target ~ Forbrugertillid_DST,
+  data = df_ml,
+  family = binomial
+)
+
+summary(ml_model)
+
+new_2025 <- data.frame(
+  Forbrugertillid_DST = -17.2
+)
+
+prob_2025 <- predict(ml_model, newdata = new_2025, type = "response")
+prob_2025
+
+if (prob_2025 > 0.5) {
+  "Modellen forudsiger, at julehandlen i 2025 bliver STØRRE end i 2024"
+} else {
+  "Modellen forudsiger, at julehandlen i 2025 bliver MINDRE end i 2024"
+}
+
+
+### 3.2
+
+# Forudsig sandsynligheder
+df_ml$prob <- predict(ml_model, type = "response")
+
+# Klassificér (cut-off = 0.5)
+df_ml$pred <- ifelse(df_ml$prob >= 0.5, 1, 0)
+
+
+# Confusion matrix (antal)
+table(df_ml$Target, df_ml$pred)
+
+prop.table(table(df_ml$Target, df_ml$pred)) * 100
+
+mean(df_ml$Target == df_ml$pred)
+
+library(pROC)
+
+roc_obj <- roc(df_ml$Target, df_ml$prob)
+plot(roc_obj, col = "blue", main = "ROC-kurve – logit model")
+auc(roc_obj)
+
+head(
+  data.frame(
+    Faktisk = df_ml$Target,
+    Sandsynlighed = round(df_ml$prob, 3),
+    Forudsagt = df_ml$pred
+  ),
+  10
+)
+
+
+### 3.2 validitet tjek
+# Predicted probabilities
+pred_prob <- predict(ml_model, type = "response")
+
+# Convert to klassifikation (1 hvis > 0.5)
+pred_class <- ifelse(pred_prob > 0.5, 1, 0)
+
+# Confusion matrix
+table(Predicted = pred_class, Actual = df_ml$Target)
+
+# Accuracy
+mean(pred_class == df_ml$Target)
+
+
+
+
+################### OPGAVE 4 #########################
+
+#4.1 validitet
+
+spm12$indikator6 <- rowMeans(spm12[, c(
+  "fam_idag",
+  "ansk_fordelag",
+  "pris_år",
+  "ansk_12",
+  "sparer_op_12",
+  "fam_sparer_op"
+)], na.rm = TRUE)
+
+
+early  <- spm12 %>% filter(kvartal < 2009.00)
+late   <- spm12 %>% filter(kvartal >= 2009.00)
+
+fit_early <- lm(vkst_pct ~ indikator6, data = early)
+fit_late  <- lm(vkst_pct ~ indikator6, data = late)
+
+summary(fit_early)$r.squared
+summary(fit_late)$r.squared
+
+
+
+
+## 1.4
+
+library(pls)
+
+pcr_fit <- pcr(
+  vkst_pct ~ .,
+  data = pca_df,
+  scale = TRUE,
+  validation = "CV"
+)
+
+
+q4_2025 <- ftillid_m %>%
+  filter(substr(ÅrMåned, 2, 5) == "2025",
+         substr(ÅrMåned, 7, 8) %in% c("10", "11")) %>% 
+  summarise(across(
+    c(`F4 Danmarks økonomiske situation i dag, sammenlignet med for et år siden`,
+      `F9 Anskaffelse af større forbrugsgoder, fordelagtigt for øjeblikket`,
+      `F7 Priser om et år, sammenlignet med i dag`,
+      `F10 Anskaffelse af større forbrugsgoder, inden for de næste 12 mdr.`,
+      `F12 Regner med at kunne spare op i de kommende 12 måneder`,
+      `F13 Familiens økonomiske situation lige nu: kan spare/penge slår til/ bruger mere end man tjener`),
+    \(x) mean(x, na.rm = TRUE)
+  ))
+
+
+
+print(q4_2025)
+
+
+# PCA-loadings fra første komponent
+w <- loadings(pcr_fit)[, 1]
+
+map_names <- c(
+  dan_idag        = "F4 Danmarks økonomiske situation i dag, sammenlignet med for et år siden",
+  ansk_fordelag   = "F9 Anskaffelse af større forbrugsgoder, fordelagtigt for øjeblikket",
+  pris_år         = "F7 Priser om et år, sammenlignet med i dag",
+  ansk_12         = "F10 Anskaffelse af større forbrugsgoder, inden for de næste 12 mdr.",
+  sparer_op_12    = "F12 Regner med at kunne spare op i de kommende 12 måneder",
+  fam_sparer_op   = "F13 Familiens økonomiske situation lige nu: kan spare/penge slår til/ bruger mere end man tjener"
+)
+
+
+w_use <- w[names(map_names)]
+
+
+w_norm <- abs(w_use) / sum(abs(w_use))
+sum(w_norm)   # = 1 
+w_norm
+
+q4_vec <- as.numeric(q4_2025[map_names])
+indikator_2025K4 <- sum(q4_vec * w_norm)
+indikator_2025K4
+
+
+
+
+S#1.3
+names(combo_dfs1)[which.max(R2)]
+
+
+names(spm12)
+
+# 1. PCA-vægte
+w_norm  # de normaliserede vægte (6 værdier)
+
+# 2. Q4 2025 middelværdier
+q4_2025   # 1x6 tibble (som du allerede udregnede)
+
+# 3. Forudsig årlig vækst
+pred_2025Q4 <- sum(w_norm * as.numeric(q4_2025))
+
+pred_2025Q4
+
+
+#PCA
+install.packages("pls")
+library(pls)
+
+pcr.fit <- pcr(forbrug ~
+                 fam_i_dag +
+                 fam_om_år +
+                 danm_idag + 
+                 danm_om_år +
+                 ansk_12,
+               data = DST_Mikro , scale = TRUE , 
+               validation = "CV")
+summary(pcr.fit)
+loadings.pcr.fit <- pcr.fit$loadings
+w.indicators.1 <- loadings.pcr.fit[1:5]^2
+sum(w.indicators.1)
+
+#plot
+validationplot(pcr.fit, val.type = "MSEP")
+
+#PLS
+pls.fit <- plsr(forbrug ~
+                  fam_i_dag +
+                  fam_om_år +
+                  danm_idag + 
+                  danm_om_år +
+                  ansk_12,
+                data = DST_Mikro , scale = TRUE , 
+                validation = "CV")
+
+summary(pls.fit)
+loadings.pls.fit <- pls.fit$loadings
+w.indicators.2 <- loadings.pls.fit[1:5]^2
+sum(w.indicators.2)
+
+
+#Alle 12 spørgsmål
+pcr.fit1 <- pcr(Forbrug ~
+                  fam_i_dag +
+                  fam_om_år +
+                  dan_idag + 
+                  dan_om_år +
+                  ansk_fordelag +
+                  priser_idag +
+                  priser_om_år +
+                  arbejdsløshed + 
+                  ansk_12 +
+                  fornruftig_sparer_op+
+                  sparer_op +
+                  fam_spare,
+                data = Alle_12_spørgsmål_kvt1 , scale = TRUE , 
+                validation = "CV")
+summary(pcr.fit1)
+loadings.pcr.fit1 <- pcr.fit1$loadings
+w.indicators.3 <- loadings.pcr.fit1[1:12]^2
+sum(w.indicators.3)
+print(loadings.pcr.fit1)
+
+print(loadings.pcr.fit1)
+#plot
+validationplot(pcr.fit1, val.type = "MSEP")
+
+
+#De tre højeste vægte (absolut værdi)
+
+loadings.pcr.fit3 <- pcr.fit1$loadings
+sort(abs(loadings.pcr.fit1[, 1]), decreasing = TRUE)
+
+
+#De tre højeste vægte
+
+#fam_i_dag – 0.3573
+
+#priser_idag / priser_om_år – 0.3381
+
+#fam_om_år – 0.3342
+
+
+
+#2.3
+library(pls)
+
+# --- 1) Udvælg de to kvartaler fra det NYE datasæt ---
+forbrug_2024Q3 <- Alle_12_spørgsmål_kvt[Alle_12_spørgsmål_kvt$Kvartal == "X2024K3", ]
+forbrug_2025Q3 <- Alle_12_spørgsmål_kvt[Alle_12_spørgsmål_kvt$Kvartal == "X2025K3", ]
+
+# --- 2) Fjern kolonner der ikke skal bruges i predict() ---
+forbrug_2024Q3 <- forbrug_2024Q3[, !(names(forbrug_2024Q3) %in% c("Kvartal", "Forbrug"))]
+forbrug_2025Q3 <- forbrug_2025Q3[, !(names(forbrug_2025Q3) %in% c("Kvartal", "Forbrug"))]
+
+# --- 3) Brug din eksisterende PCA-model (trænet på Alle_12_spørgsmål_kvt1) ---
+pred_2024Q3 <- as.numeric(predict(pcr.fit1, newdata = forbrug_2024Q3, ncomp = 3))
+pred_2025Q3 <- as.numeric(predict(pcr.fit1, newdata = forbrug_2025Q3, ncomp = 3))
+
+# --- 4) Beregn årlig realvækst i procent ---
+realvaekst_2025 <- ((pred_2025Q3 - pred_2024Q3) / abs(pred_2024Q3)) * 100
+realvaekst_2025
+
+names(pcr.fit1$model)
+names(forbrug_2025Q3)
+
+setdiff(names(Alle_12_spørgsmål_kvt1), names(Alle_12_spørgsmål_kvt))
+
+
+names(pcr.fit1$model)[-1]   # Alle X-variabler i modellen (uden Y)
+names(forbrug_2025Q3)
+
+# Sørg for at kolonnerne står i samme rækkefølge som modellen forventer
+forbrug_2024Q3 <- forbrug_2024Q3[, names(pcr.fit1$model)[-1]]
+forbrug_2025Q3 <- forbrug_2025Q3[, names(pcr.fit1$model)[-1]]
+
+pred_2024Q3 <- as.numeric(predict(pcr.fit1, newdata = forbrug_2024Q3, ncomp = 3))
+pred_2025Q3 <- as.numeric(predict(pcr.fit1, newdata = forbrug_2025Q3, ncomp = 3))
+
+realvaekst_2025 <- ((pred_2025Q3 - pred_2024Q3) / abs(pred_2024Q3)) * 100
+realvaekst_2025
+
+# 1️⃣ Tjek hvor mange kolonner modellen forventer
+length(names(pcr.fit1$model)) - 1
+
+# 2️⃣ Tjek hvor mange kolonner dit newdata har
+ncol(forbrug_2025Q3)
+
+# 3️⃣ Se hvad predict() får som input (før den fejler)
+str(forbrug_2025Q3)
+
+setdiff(names(pcr.fit1$model)[-1], names(forbrug_2025Q3))
+
+forbrug_2025Q3[is.na(forbrug_2025Q3)] <- 0
+
+
+
+pred_2025Q3 <- as.numeric(predict(pcr.fit1, newdata = forbrug_2025Q3, ncomp = 3))
+pred_2024Q3 <- as.numeric(predict(pcr.fit1, newdata = forbrug_2024Q3, ncomp = 3))
+realvaekst_2025 <- ((pred_2025Q3 - pred_2024Q3) / abs(pred_2024Q3)) * 100
+realvaekst_2025
+
+
+pred_2024Q3
+pred_2025Q3
+
+
+library(pls)
+
+#Udvælg kvartaler
+forbrug_2024Q3 <- subset(Alle_12_spørgsmål_kvt, Kvartal == "X2024K3")
+forbrug_2025Q3 <- subset(Alle_12_spørgsmål_kvt, Kvartal == "X2025K3")
+
+#Fjern kolonner der ikke bruges til prediction
+cols <- setdiff(names(pcr.fit1$model)[-1], c("Kvartal", "Forbrug"))
+forbrug_2024Q3 <- forbrug_2024Q3[, cols]
+forbrug_2025Q3 <- forbrug_2025Q3[, cols]
+
+#Erstat evt. manglende værdier med 0
+forbrug_2024Q3[is.na(forbrug_2024Q3)] <- 0
+forbrug_2025Q3[is.na(forbrug_2025Q3)] <- 0
+
+#Forudsig forbrug for hvert kvartal
+pred_2024Q3 <- predict(pcr.fit1, newdata = forbrug_2024Q3, ncomp = 3)
+pred_2025Q3 <- predict(pcr.fit1, newdata = forbrug_2025Q3, ncomp = 3)
+
+#Beregn årlig realvækst i %
+realvaekst_2025 <- ((pred_2025Q3 - pred_2024Q3) / abs(pred_2024Q3)) * 100
+realvaekst_2025
+
+
+
+#Opgave 3 OLA 3
+library(dplyr)
+
+#3.1
+
+# data klar
+Forbrugertillids_opg_3 <- data.frame(Kvartal = final_df$Kvartal[1:102],
+                                     Forbrugertillid_DST = final_df$dst_ft[1:102])
+
+
+Privatforbrug_opg_3 <- data.frame(Kvartal = final_df$Kvartal[1:102],
+                                  Privatforbrug = final_df$vkstp_pct[1:102])
+
+#merge
+df_opg_3_1 <- merge(Forbrugertillids_opg_3, Privatforbrug_opg_3, by = "Kvartal")
+
+#Målvariabel
+
+# Opretter target: 1 hvis forbrug > året før (4 kvartaler tilbage), ellers 0
+
+df_opg_3_1 <- df_opg_3_1 %>%
+  mutate(Target = ifelse(Privatforbrug > lag(Privatforbrug, 4), 1, 0)) # # lag(…,4) sammenligner med samme kvartal året før
+#ifelse viser årlig vækst (kvartal mod samme kvartal sidste år)
+
+
+df_clean_opg_3_1 <- na.omit(df_opg_3_1)  # fjerner rækker med NA
+
+
+#lavet en logistisk regression, hvor modellen prøver at forudsige sandsynligheden for, at:
+#julehandlen (privatforbrug) bliver større end året før ud fra forbrugertilliden (DST).
+
+model_opg_3_1 <- glm(Target ~ Forbrugertillid_DST, data = df_clean_opg_3_1, family = binomial)
+summary(model_opg_3_1)
+
+#DST k3
+
+DST_2025k3 <- data.frame(Forbrugertillid_DST = -17.2)
+
+#forudsigelsen
+
+forudsigelse_opg_3_1 <- predict(model_opg_3_1, newdata = DST_2025k3, type = "response") ## beregner sandsynligheden for at julehandlen stiger
+forudsigelse_opg_3_1  # viser sandsynligheden for at julehandlen stiger
+#modellen vurderer 35,3 % sandsynlighed for, at julehandlen i 2025 bliver større end i 2024.
+
+
+#If else
+if (forudsigelse_opg_3_1 > 0.5) {
+  print("Modellen forudsiger, at julehandlen i 2025 bliver STØRRE end i 2024.")
+} else {
+  print("Modellen forudsiger, at julehandlen i 2025 bliver MINDRE end i 2024.")
+}
+
+# forudsigelser på hele datasættet (træningsdata)
+pred <- predict(model_opg_3_1, type = "response")
+
+# Klassificér som 1 hvis sandsynlighed > 0.5, ellers 0
+pred_class <- ifelse(pred > 0.5, 1, 0)
+
+# 3. Lav confusion matrix
+table(Predicted = pred_class, Actual = df_clean_opg_3_1$Target)
+#True Negative (TN) = 13 → modellen gættede korrekt “0” (fald i handel)
+
+#False Negative (FN) = 8 → modellen sagde “0”, men det var faktisk “1”
+
+#False Positive (FP) = 30 → modellen sagde “1”, men det var faktisk “0”
+
+#True Positive (TP) = 47 → modellen gættede korrekt “1” (stigning i handel)
+
+accuracy <- (13 + 47) / (13 + 8 + 30 + 47) # samlet andel korrekte (~0.61)
+accuracy
+sensitivity <- 47 / (47 + 8)                # andel korrekt fundne stigninger (~0.85)
+specificity <- 13 / (13 + 30)               # andel korrekt fundne fald (~0.30)
+
+accuracy; sensitivity; specificity
+
+#ROC
+
+# ROC-kurve og AUC (Area Under Curve)
+install.packages("pROC")
+library(pROC)
+
+# sandsynligheder fra modellen
+pred_probs <- predict(model_opg_3_1, type = "response")
+
+# ROC-objekt
+roc_obj <- roc(df_clean_opg_3_1$Target, pred_probs)
+
+# plot 
+plot(roc_obj, col = "blue", lwd = 2, main = "0.57 – Modellen fanger kun halvdelen af julehandlens virkelighed")
+abline(a = 0, b = 1, lty = 2, col = "gray")  # diagonal reference-linje
+
+# AUC (mål for modellens præcision)
+auc(roc_obj)
+
+
+#Area under the curve: 0.5748
+
+#0.5 = tilfældig gætning
+
+#0.7–0.8 = god model
+
+#0.8–0.9 = meget god model
+
+#ROC-kurven viser, hvor godt modellen kan adskille perioder med stigende vs. faldende julehandel.
+
+#AUC (Area Under Curve) = 0.57 betyder, at modellen kun lige akkurat er bedre end tilfældig gætning (0.5).
+
+#Med andre ord har den begrænset præcision, men fanger stadig nogle mønstre i data.
+
+#save envoirment
+
+save.image("mitprojekt.RData")
+
+load("mitprojekt.RData")
+
+
