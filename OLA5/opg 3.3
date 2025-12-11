@@ -1,0 +1,22 @@
+ggplot(data, aes(x = laane_mulighed, y = log_balance)) +
+  geom_jitter(alpha = 0.3, width = 0.2) +
+  labs(
+    title = "Log-balance fordelt på vurderingen af lånemuligheder",
+    x = "Vurdering af lånemuligheder",
+    y = "log(Balance)"
+  ) +
+  theme_minimal(base_size = 14)
+
+  # Plot i procent
+barplot(pct,
+        col = "lightblue",
+        main = "Fordeling af svar: Muligheder for at låne penge til virksomheder",
+        ylab = "Procent",
+        xlab = "Svarmulighed",
+        ylim = c(0, max(pct) * 1.1))
+
+# Tilføj procenttal ovenpå søjlerne (valgfrit)
+text(x = barplot(pct, plot = FALSE),
+     y = pct,
+     labels = paste0(round(pct, 1), "%"),
+     pos = 3, cex = 0.8)
