@@ -1,0 +1,17 @@
+### opgave 1.4 ###
+# lav et plot 
+library(scales)
+ggplot(merged_df_summary, aes(x = kategori, y = gennemsnit_kvm, fill = kategori)) +
+  geom_col() +
+  scale_y_continuous(labels = label_comma(big.mark = ".", decimal.mark = ",")) +
+  labs(
+    title = "Gennemsnitlig kvadratmeterpris efter bystørrelse",
+    x = "Kategori",
+    y = "Pris per kvadratmeter (kr.)",
+    fill = "Kategori"
+  ) +
+  theme_minimal()
+
+# Der kommer en stor overvægt af mini byer med rigtig høj kvadratmeterpris. 
+# Dette virker forkert, men det er fordi at det er alle postnumrene i indre by kbh K og Fredriksberg
+# som er mega dyrer. Derfor burde man nok ligge de postnumre sammen således at de ikke er i mini kategorien.
