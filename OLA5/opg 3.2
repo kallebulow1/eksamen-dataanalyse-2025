@@ -1,0 +1,233 @@
+# CLM model
+model_clm <- clm(
+  laane_mulighed ~ data$Soliditetsgrad.2020....,
+  data = data,
+  link = "logit"
+)
+
+# Print modelresultater
+summary(model_clm)
+# CLM model med Balance 2020 som forklarende variabel
+model_clm_balance <- clm(
+  laane_mulighed ~ data$log_balance,
+  data = data,
+  link = "logit"
+)
+
+# Vis resultater
+summary(model_clm_balance)
+library(ggplot2)
+
+
+
+
+# Lav en frekvenstabel
+freq <- table(data$Hvordan.ser.du.mulighederne.for.at.låne.penge.til.din.virksomhed...fiktivt.spørgsmål.)
+# Omsæt til procent
+pct <- freq / sum(freq) * 100
+# Plot i procent
+barplot(pct,
+        col = "lightblue",
+        main = "Fordeling af svar: Muligheder for at låne penge til virksomheder",
+        ylab = "Procent",
+        xlab = "Svarmulighed",
+        ylim = c(0, max(pct) * 1.1))
+
+# Tilføj procenttal ovenpå søjlerne (valgfrit)
+text(x = barplot(pct, plot = FALSE),
+     y = pct,
+     labels = paste0(round(pct, 1), "%"),
+     pos = 3, cex = 0.8)
+
+
+
+
+# Søjlediagram
+barplot(freq,
+        main = "Fordeling af svar: Muligheder for at låne penge til virksomheden",
+        xlab = "Svarmulighed",
+        ylab = "Antal svar",
+        col = "lightblue",
+        las = 2)  # roterer labels så de er læsbare
+
+counts <- table(data$Hvordan.ser.du.mulighederne.for.at.låne.penge.til.din.virksomhed...fiktivt.spørgsmål.)
+data_svar <- data.frame(
+  Svar = names(counts),
+  Antal = as.numeric(counts)
+)
+
+data_svar
+library(ggplot2)
+ggplot(data_svar, aes(x = Svar, y = Antal)) +
+  geom_col(fill = "steelblue") +
+  theme_minimal()
+
+data_svar$Svar <- factor(
+  data_svar$Svar,
+  levels = c("Meget dårlige", "Dårlige", "Neutrale", "Gode", "Meget gode")
+)
+ggplot(data_svar, aes(x = Svar, y = Antal)) +
+  geom_col(fill = "steelblue") +
+  labs(
+    title = "Fordeling af svar",
+    x = "Svar",
+    y = "Antal"
+  ) +
+  theme_minimal() +
+  theme(axis.text.x = element_text(angle = 20, hjust = 1))
+
+data$Hvordan.ser.du.mulighederne.for.at.låne.penge.til.din.virksomhed...fiktivt.spørgsmål. <- factor(
+  data$Hvordan.ser.du.mulighederne.for.at.låne.penge.til.din.virksomhed...fiktivt.spørgsmål.,
+  levels = c("Meget dårlige", "Dårlige", "Neutrale", "Gode", "Meget gode"),
+  ordered = TRUE
+)
+y <- data$Hvordan.ser.du.mulighederne.for.at.låne.penge.til.din.virksomhed...fiktivt.spørgsmål.
+y
+model <- clm(y ~ omsaetning + alder + sektor, data = data)
+summary(model)
+class(data$Antal.ansatte.Cvr.nr.)
+data$Hvordan.ser.du.mulighederne.for.at.låne.penge.til.din.virksomhed...fiktivt.spørgsmål. <- factor(
+  data$Hvordan.ser.du.mulighederne.for.at.låne.penge.til.din.virksomhed...fiktivt.spørgsmål.,
+  levels = c("Meget dårlige", "Dårlige", "Neutrale", "Gode", "Meget gode"),
+  ordered = TRUE
+)
+colnames(data)
+class(data$Afkastningsgrad.2020....)
+class(data$Soliditetsgrad.2020....)
+cols <- c("Egenkapital.forrentning.2020....",
+          "Soliditetsgrad.2020....",
+          "Likviditetsgrad.2020....",
+          "Afkastningsgrad.2020....")
+data[cols] <- lapply(data[cols], function(x) {
+  as.numeric(gsub(",", ".", gsub("%", "", x)))
+})
+data$laane_mulighed <- factor(
+  data$Hvordan.ser.du.mulighederne.for.at.låne.penge.til.din.virksomhed...fiktivt.spørgsmål.,
+  levels = c("Meget dårlige", "Dårlige", "Neutrale", "Gode", "Meget gode"),
+  ordered = TRUE
+)
+
+
+data$log_balance <- log(data$Balance.2020..1.000.kr. + 1)
+summary(data$log_balance)
+
+model_grader <- clm(
+  laane_mulighed ~ 
+    Egenkapital.forrentning.2020.... +
+    Soliditetsgrad.2020.... +
+    Likviditetsgrad.2020.... +
+    Afkastningsgrad.2020....,
+   
+  data = data
+)
+
+
+summary(model_grader)
+cols_raw <- c("Omsætning.2020..1.000.kr.",
+              "Varedebitorer.2020..1.000.kr.",
+              "Langfristet.gæld.2020..1.000.kr.",
+              "Kortfristet.gæld.2020..1.000.kr.",
+              "Balance.2020..1.000.kr.",
+              "Årets.resultat.efter.minoritetsinteresser.2020..1.000.kr.")
+
+# Lav log-transformerede versioner
+data[paste0("log_", cols_raw)] <- 
+  lapply(data[cols_raw], function(x) log(as.numeric(x) + 1))
+log_cols <- paste0("log_", cols_raw)
+data[log_cols] <- scale(data[log_cols])
+model <- clm(
+  laane_mulighed ~ 
+    log_Omsætning.2020..1.000.kr. +
+    log_Varedebitorer.2020..1.000.kr. +
+    log_Langfristet.gæld.2020..1.000.kr. +
+    log_Kortfristet.gæld.2020..1.000.kr. +
+    log_Balance.2020..1.000.kr. +
+    log_Årets.resultat.efter.minoritetsinteresser.2020..1.000.kr.,
+  data = data
+)
+
+model <- clm(
+  laane_mulighed ~ 
+    log_Kortfristet.gæld.2020..1.000.kr. +
+    log_Balance.2020..1.000.kr. +
+    log_Årets.resultat.efter.minoritetsinteresser.2020..1.000.kr.,
+  data = data
+)
+data$ROA <- data$Årets.resultat.efter.minoritetsinteresser.2020..1.000.kr. /
+  data$Balance.2020..1.000.kr.
+
+
+
+summary(model)
+
+
+data$Balance.2020..1.000.kr.
+colnames(data)
+summary(model)
+class(data$Balance.2020..1.000.kr.)
+
+
+model <- clm(Hvordan.ser.du.mulighederne.for.at.låne.penge.til.din.virksomhed...fiktivt.spørgsmål. ~ Antal.ansatte.Cvr.nr. + Etableringsdato, data = data)
+summary(model)
+
+class(data$Antal.ansatte.Cvr.nr.)
+
+
+
+model <- clm(
+  Hvordan.ser.du.mulighederne.for.at.låne.penge.til.din.virksomhed...fiktivt.spørgsmål. ~ Etableringsdato + Antal.ansatte.Cvr.nr.,
+  data = data
+)
+
+data$Hvordan.ser.du.mulighederne.for.at.låne.penge.til.din.virksomhed...fiktivt.spørgsmål. <- factor(
+  data$Hvordan.ser.du.mulighederne.for.at.låne.penge.til.din.virksomhed...fiktivt.spørgsmål.,
+  levels = c("Meget dårlige", "Dårlige", "Neutrale", "Gode", "Meget gode"),
+  ordered = TRUE
+)
+str(data$Hvordan.ser.du.mulighederne.for.at.låne.penge.til.din.virksomhed...fiktivt.spørgsmål.)
+table(data$Hvordan.ser.du.mulighederne.for.at.låne.penge.til.din.virksomhed...fiktivt.spørgsmål.)
+
+model <- clm(Hvordan.ser.du.mulighederne.for.at.låne.penge.til.din.virksomhed...fiktivt.spørgsmål. ~ Etableringsdato + Antal.ansatte.Cvr.nr., data = data)
+summary(model)
+
+data$Etableringsdato <- as.Date(data$Etableringsdato, format = "%d.%m.%Y")
+
+data$laane_mulighed <- factor(
+  data$Hvordan.ser.du.mulighederne.for.at.låne.penge.til.din.virksomhed...fiktivt.spørgsmål.,
+  levels = c("Meget dårlige", "Dårlige", "Neutrale", "Gode", "Meget gode"),
+  ordered = TRUE
+)
+
+colnames(data)
+is.ordered(data$laane_mulighed)
+table(data$laane_mulighed)
+
+
+model0 <- clm(laane_mulighed ~ 1, data = data)
+summary(model0)
+
+
+
+model1 <- clm(
+  laane_mulighed ~ Antal.ansatte.Cvr.nr.,
+  data = data,
+  link = "logit"
+)
+
+summary(model1)
+
+model_bf_2020 <- clm(
+  laane_mulighed ~ Bruttofortjeneste.2020..1.000.kr.,
+  data = data,
+  link = "logit"
+)
+
+summary(model_bf)
+
+class(data$Bruttofortjeneste.2020..1.000.kr.)
+
+
+
+
+
+
