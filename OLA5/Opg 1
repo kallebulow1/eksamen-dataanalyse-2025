@@ -1,0 +1,243 @@
+
+Arduino kode: 
+
+#include <HCSR04.h>
+
+byte triggerPin = 3;
+byte echoPin = 2;
+
+void setup () {
+  Serial.begin(9600);
+  HCSR04.begin(triggerPin, echoPin);
+}
+
+void loop () {
+  double* distances = HCSR04.measureDistanceCm();
+  
+  Serial.print("1: ");
+  Serial.print(distances[0]);
+  Serial.println(" cm");
+  
+  Serial.println("---");
+  delay(3000);
+}
+
+#include <HCSR04.h>
+
+byte triggerPin = 3;
+byte echoPin    = 2;
+
+int threshold = 15;          // <-- NY THRESHOLD baseret på 17 cm / 12 cm
+int customer_count = 0;
+bool person_detected = false;
+
+void setup() {
+  Serial.begin(9600);
+  HCSR04.begin(triggerPin, echoPin);
+
+  Serial.println("time_ms,distance_cm,count");
+}
+
+void loop() {
+  // Mål afstand med biblioteket
+  double* distances = HCSR04.measureDistanceCm();
+  double d = distances[0];   // første sensor
+
+  // Tælle-logik
+  if (d > 0 && d < threshold && !person_detected) {
+    person_detected = true;
+    customer_count++;
+  }
+
+  // Slipper personen ud af zonen, resetter vi
+  if (d >= threshold || d <= 0) {
+    person_detected = false;
+  }
+
+  // Print data
+  Serial.print(millis());
+  Serial.print(",");
+  Serial.print(d);
+  Serial.print(",");
+  Serial.println(customer_count);
+
+  delay(100);
+}
+
+
+####### R kode ##########
+
+# Skift COM3 til jeres port
+con <- file("COM3", open = "r")
+
+# Sørg for at lukke porten når R stopper
+on.exit(close(con))
+
+# Tom vector til lagring
+lines <- character()
+
+cat("Reading live data ... Press ESC or stop to end.\n")
+
+# Læs 50 linjer som eksempel
+for(i in 1:200) {
+  line <- readLines(con, n = 1)
+  
+  if(length(line) > 0) {
+    print(line)
+    lines <- c(lines, line)
+  }
+  
+  Sys.sleep(0.1)
+}
+
+# Behold kun linjer der matcher formatet: tal, tal, tal
+clean_lines <- grep("^\\d+,\\d+\\.?\\d*,\\d+$", lines, value = TRUE)
+
+df <- read.csv(text = paste(clean_lines, collapse = "\n"),
+               header = FALSE)
+
+colnames(df) <- c("time_ms", "distance_cm", "count")
+
+#plot
+plot(df$time_ms, df$count, type="l")
+
+
+plot(df$time_ms, df$distance_cm, type="l")
+
+
+library(ggplot2)
+
+#1
+ggplot(df, aes(x = time_ms, y = distance_cm)) +
+  geom_line(size = 1.1, color = "#1f77b4") +
+  labs(
+    title = "Når kunden træder ind: Sensorens øjebliksbillede af bevægelsen",
+    subtitle = "Faldet i distance afslører præcis, hvornår en kunde passerer indgangen.",
+    x = "Tid (ms)",
+    y = "Distance til sensor (cm)"
+  ) +
+  theme_minimal(base_size = 14)
+
+#2
+ggplot(df, aes(x = time_ms, y = count)) +
+  geom_step(size = 1.2, color = "#d62728") +
+  labs(
+    title = "Én kunde, én registrering: Systemets live tælling af besøg",
+    subtitle = "Count stiger i takt med, at personer passerer målepunktet.",
+    x = "Tid (ms)",
+    y = "Antal registrerede kunder"
+  ) +
+  theme_minimal(base_size = 14)
+
+#3
+ggplot(df, aes(x = time_ms)) +
+  geom_line(aes(y = distance_cm), color = "#1f77b4", size = 1.1) +
+  geom_step(aes(y = count * 2), color = "#d62728", size = 1.1) +
+  labs(
+    title = "Fra bevægelse til registrering: Sådan opdager sensoren en kunde",
+    subtitle = "Når afstand falder, springer tælleren — sensorens logik visualiseret.",
+    x = "Tid (ms)",
+    y = "Værdi"
+  ) +
+  theme_minimal(base_size = 14)
+
+
+#Continious While Loop eksperiment
+con <- file("COM3", "r")
+on.exit(close(con))
+
+repeat {
+  line <- readLines(con, n = 1)
+  print(line)
+  
+  # Stop hvis count overstiger 20
+  if(grepl(",20$", line)) break
+  
+  Sys.sleep(0.05)
+}
+
+close(con)
+
+con <- file("COM3", open = "r")
+readLines(con, 1)
+
+try(close(con), silent = TRUE)
+
+con <- file("COM3", open = "r")
+
+lines <- character()
+
+for(i in 1:200) {    # Læs 100 raw linjer
+  line <- readLines(con, n = 1)
+  lines <- c(lines, line)
+  Sys.sleep(0.05)
+}
+
+clean_lines <- grep("^\\d+,\\d+\\.?\\d*,\\d+$", lines, value = TRUE)
+
+df1 <- read.csv(text = paste(clean_lines, collapse = "\n"),
+               header = FALSE)
+
+colnames(df) <- c("time_ms", "distance_cm", "count")
+
+
+close(con)
+
+con <- file("COM3", open = "r")
+
+lines <- c()
+start <- Sys.time()
+
+for(i in 1:200) {    # Læs 100 raw linjer
+  line <- readLines(con, n = 1)
+  lines <- c(lines, line)
+  Sys.sleep(0.05)
+}
+
+close(con)
+
+# Åbn serial-port
+con <- file("COM3", open = "r")
+on.exit(close(con))
+
+lines <- character()
+
+# Læs 200 linjer fra Arduino
+for (i in 1:500) {
+  line <- try(readLines(con, n = 1), silent = TRUE)
+  
+  if (length(line) > 0 && !inherits(line, "try-error")) {
+    print(line)           # så du kan se dem i konsollen
+    lines <- c(lines, line)
+  }
+  
+  Sys.sleep(0.05)         # lille pause så Arduino kan nå at sende nyt
+}
+
+length(lines)             # hvor mange linjer fik vi?
+
+clean_lines <- grep("^\\d+,\\d+\\.?\\d*,\\d+$", lines, value = TRUE)
+length(clean_lines)    # Tjek hvor mange gyldige linjer vi har
+
+df1 <- read.csv(
+  text = paste(clean_lines, collapse = "\n"),
+  header = FALSE
+)
+
+colnames(df) <- c("time_ms", "distance_cm", "count")
+
+head(df)
+nrow(df)
+colnames(df1) <- c("time_ms", "distance_cm", "count")
+
+library(ggplot2)
+
+ggplot(df1, aes(x = time_ms, y = distance_cm)) +
+  geom_line(size = 1.1, color = "#1f77b4") +
+  labs(
+    title = "Simulationstest: Registrerer sensoren bevægelse korrekt?",
+    subtitle = "En testperson gik rundt om et bord for at simulere kundeadfærd – afstandsfaldet viser, at målingerne er stabile og præcise.",
+    x = "Tid (ms)",
+    y = "Distance til sensor (cm)"
+  ) +
+  theme_minimal(base_size = 14)
