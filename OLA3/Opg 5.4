@@ -1,0 +1,186 @@
+# opgave 5.4
+library(httr)
+library(jsonlite)
+library(dplyr)
+library(ggplot2)
+library(scales)
+
+
+api_key="41962073-1223-473e-8520-900e58a24369"
+url="https://dmigw.govcloud.dk/v2/metObs/collections/observation/items"
+
+
+#### Data for aarhus ###
+# vind hastighed
+resspeed <- GET(
+  url,
+  add_headers("X-Gravitee-Api-Key" = api_key),
+  query = list(
+    stationId = "06074",            # Århus Syd
+    parameterId = "wind_speed",       # vind hastighed i m/s
+    datetime = "2023-10-20T00:00:00Z/2023-10-21T23:59:59Z")) # tidsinterval
+
+status_code(resspeed) # tjek om der adgang til api
+
+dataspeed <- fromJSON(content(resspeed, "text"), flatten = TRUE)
+
+aarhusspeed_df <- dataspeed$features # lave om til data frame
+
+# lave tidsintervallerne om til timebasis istedet for hvert 10. minut
+timebasis_speed <- aarhusspeed_df %>%
+  mutate (properties.observed = ceiling(row_number() / 6)) %>%   # opdeler i grupper á 6 rækker
+  group_by(properties.observed) %>%
+  summarise(hastighed_aarhus = mean(properties.value, na.rm = TRUE)) %>%
+  ungroup()
+
+# vind retning
+res <- GET(
+  url,
+  add_headers("X-Gravitee-Api-Key" = api_key),
+  query = list(
+    stationId = "06074",            # Århus Syd
+    parameterId = "wind_dir",       # Wind direction
+    datetime = "2023-10-20T00:00:00Z/2023-10-21T23:59:59Z")) # tidsinterval
+
+status_code(res) # tjek om der adgang til api
+
+data <- fromJSON(content(res, "text"), flatten = TRUE) # lave data fra api om til tekst og "flade" det ud så det nemmere at arbejde med
+
+aarhus_df <- data$features %>% # lave om til data frame
+  mutate(
+    timeStamp = data$timeStamp,
+    numberReturned = data$numberReturned,
+    type = data$type)
+
+# lave tidsintervallerne om til timebasis istedet for hvert 10. minut
+timebasis <- aarhus_df %>%
+  mutate (properties.observed = ceiling(row_number() / 6)) %>%   # opdeler i grupper á 6 rækker
+  group_by(properties.observed) %>%
+  summarise(retning_aarhus = mean(properties.value, na.rm = TRUE)) %>%
+  ungroup()
+
+
+
+
+
+
+
+
+### data for Anholt ###
+# vind hastighed
+resspeed_anholt <- GET(
+  url,
+  add_headers("X-Gravitee-Api-Key" = api_key),
+  query = list(
+    stationId = "06079",            # Anholt
+    parameterId = "wind_speed",       # vind hastighed i m/s
+    datetime = "2023-10-20T00:00:00Z/2023-10-21T23:59:59Z")) # tidsinterval
+
+status_code(resspeed_anholt) # tjek om der adgang til api
+
+anholt_dataspeed <- fromJSON(content(resspeed_anholt, "text"), flatten = TRUE)
+
+anholtspeed_df <- anholt_dataspeed$features # lave om til data frame
+
+# lave tidsintervallerne om til timebasis istedet for hvert 10. minut
+timebasis_speed_anholt <- anholtspeed_df %>%
+  mutate (properties.observed = ceiling(row_number() / 6)) %>%   # opdeler i grupper á 6 rækker
+  group_by(properties.observed) %>%
+  summarise(hastighed_anholt = mean(properties.value, na.rm = TRUE)) %>%
+  ungroup()
+
+# Vind retning
+res2 <- GET(
+  url,
+  add_headers("X-Gravitee-Api-Key" = api_key),
+  query = list(
+    stationId = "06079",            # Anholt
+    parameterId = "wind_dir",       # Wind direction
+    datetime = "2023-10-20T00:00:00Z/2023-10-21T23:59:59Z")) # tidsinterval
+
+status_code(res) # tjekke om der adgang til api, 200 betyder at der er adgang.
+
+data2 <- fromJSON(content(res2, "text"), flatten = TRUE) # lave data fra api om til tekst og "flade" det ud så det nemmere at arbejde med
+
+anholt_df <- data2$features %>% # lave om til data frame
+  mutate(
+    timeStamp = data2$timeStamp,
+    numberReturned = data2$numberReturned,
+    type = data2$type)
+
+# lave tidsintervallerne om til timebasis istedet for hvert 10. minut
+timebasis2 <- anholt_df %>%
+  mutate (properties.observed = ceiling(row_number() / 6)) %>%   # opdeler i grupper á 6 rækker
+  group_by(properties.observed) %>%
+  summarise(retning_anholt = mean(properties.value, na.rm = TRUE)) %>%
+  ungroup()
+
+
+
+
+
+######### merge begge byers data for vind hastighed og retning ########
+# merge aarhus speed og direction i en data frame
+merge_aarhus <- merge(timebasis, timebasis_speed, by = "properties.observed")
+
+# merge anholt speed og direction i en data frame
+merge_anholt <- merge(timebasis2, timebasis_speed_anholt, by = "properties.observed")
+
+# merge dem begge til et datasæt
+merge_begge <- merge(merge_aarhus, merge_anholt, by = "properties.observed")
+
+# vende tidskolonne da den var omvendt da vi læste data ind fra api
+# vi laver lige en kopi så vi ikke ødelægger den anden dataframe
+omvendt_begge <- merge_begge
+omvendt_begge$properties.observed <- rev(omvendt_begge$properties.observed)
+
+# Yes det virkede, nu ændre vi tidskolonnens navn så den er mere passende
+names(omvendt_begge)[1] <- "timer"
+
+
+
+
+
+### samlet ggplot for begge grafer for vind retning ###
+ggplot() +
+  geom_line(data = omvendt_begge,
+            aes(x = timer, y = retning_aarhus, color = "Århus"),
+            linewidth = 1) +
+  geom_line(data = omvendt_begge,
+            aes(x = timer, y = retning_anholt, color = "Anholt"),
+            linewidth = 1) +
+  #geom_hline(yintercept = 90, color = "black", linetype = "solid", size = 0.5) + 
+  scale_color_manual(values = c("Århus" = "darkblue", "Anholt" = "red")) +
+  labs(
+    title = "Udvikling af vindretning under stormflod, oktober 2023",
+    x = "Timer",
+    y = "Vindretning",
+    color = "Lokation"
+  ) +
+  scale_x_continuous(breaks = seq(0, 50, by = 4)) +   # x-aksen: tal for hver 5. time
+  scale_y_continuous(
+    limits = c(45, 136),  # Udvid y-aksen til hele kompasintervallet
+    breaks = c(0, 22.5, 45, 67.5, 90, 112.5, 135, 180, 225, 270, 315, 360),
+    labels = c("N", "NNØ", "NØ","ØNØ", "Ø","ØSØ", "SØ", "S", "SW", "W", "NW", "N")) +
+  theme_minimal(base_size = 14)
+
+
+
+### vind hastighed plot ###
+ggplot() +
+  geom_line(data = omvendt_begge,
+            aes(x = timer, y = hastighed_aarhus, color = "Århus"),
+            linewidth = 1) +
+  geom_line(data = omvendt_begge,
+            aes(x = timer, y = hastighed_anholt, color = "Anholt"),
+            linewidth = 1) +
+  scale_color_manual(values = c("Århus" = "darkblue", "Anholt" = "red")) +
+  labs(
+    title = "Udvikling af vindhastighed under stormflod, oktober 2023",
+    x = "Timer",
+    y = "Vindhastig i m/s",
+    color = "Lokation"
+  ) +
+  scale_x_continuous(breaks = seq(0, 48, by = 4)) +     # x-aksen: tal for hver 5. time
+  scale_y_continuous(breaks = seq(2, 15, by = 2)) +
+  theme_minimal(base_size = 14)
