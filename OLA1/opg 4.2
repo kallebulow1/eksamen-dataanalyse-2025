@@ -1,0 +1,12 @@
+### opgave 4.2 ###
+# filtrere og pivotere tabellen så den bliver breddere, så vi kan lave korrealtionsmatrix
+alkohol_wide <- alko_filter %>% select(TID,KONSUMGRP,value) %>% pivot_wider(
+  names_from = KONSUMGRP,
+  values_from = value)
+
+# korrealtion funktion
+kor <- cor(alkohol_wide %>% select(-TID),
+    use = "complete.obs")
+
+# afrunder til 2 decimaler
+kor_1 <- round(kor,2)
