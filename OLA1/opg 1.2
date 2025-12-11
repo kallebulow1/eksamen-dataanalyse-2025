@@ -1,0 +1,5 @@
+### opgave 1.2###
+# udvælg 2 ejendomme fra newhomes
+to_boliger <- newhomes %>% 
+  sample_n(2) %>% 
+  select(vej)
