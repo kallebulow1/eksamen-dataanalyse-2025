@@ -342,7 +342,7 @@ resultat_tabel <- bind_rows(
 
 resultat_tabel
 
-############ 2.2 #############
+############ 2.2 ############# og 2.3
 
 # Estimér modeller (som før)
 
