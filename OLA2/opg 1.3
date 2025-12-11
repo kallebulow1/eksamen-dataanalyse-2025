@@ -1,0 +1,17 @@
+### opgave 1.3
+# tid til at merge de to sammen med inner join da vi så kan merge på kolonnen postnummer som begge df deler
+merged_df <- merge(bolig1, post1_sum, by = "mzip")
+
+breaks <- c(10,250, 1000, 2500, 10000, 50000, 200000)
+labels <- c("mini","landsby", "lille by", "almindelig by", "større by", "storby")
+
+# Brug cut() til at kategorisere
+merged_df$kategori <- cut(merged_df$total_value,
+                          breaks = breaks,
+                          labels = labels,
+                          include.lowest = TRUE, right = TRUE)
+
+# Beregn gennemsnitlig kvadratmeterpris per kategori
+merged_df_summary <- merged_df %>%
+  group_by(kategori) %>%
+  summarise(gennemsnit_kvm = mean(kvm_pris, na.rm = TRUE))
