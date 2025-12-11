@@ -1,0 +1,12 @@
+### opgave 1.1 ###
+# indlæser data fra dkstat over befolkning pr postnummer
+postnr2_meta <- dst_meta("POSTNR2")
+
+query <- list(
+  PNR20 = "*",
+  KØN = "I alt",
+  ALDER = "Alder i alt",
+  Tid = "2025"
+)
+
+raw_postnr2 <- dst_get_data("POSTNR2", query = query, lang = "da", meta_data = postnr2_meta)
