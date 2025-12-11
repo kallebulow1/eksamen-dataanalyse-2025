@@ -1,0 +1,43 @@
+### opgave 1.2 ###
+
+# fjerne første række fra postnr datasæt
+post1 <- raw_postnr2[-1,]
+
+# fjerner kolonne 2 og 3
+post1 <- post1[, -c(2, 3)]
+
+# udtrækker fra 4. til 7. tegn, hvilket er vores postnummer som vi ligger ind i en ny kolonne
+post1$mzip <- substr(post1$PNR20, 4, 7)
+
+post1$zipplace <- sub(".*[0-9]{4} ", "", post1$PNR20)
+
+# fjern overflødig 1. kolonne nu når vi har udtrukket postnr og by
+post1 <- post1[,-1]
+post1 <- post1[,-1]
+
+# ligger alle postnumrene sammen i samme bydel
+post1_sum <- post1 %>%
+  group_by(mzip) %>%       # Gruppér efter bynavn
+  summarise(total_value = sum(value, na.rm = TRUE))  # Summér value
+
+# tjekke om der er dubletter, efter jeg har summeret dem. false = ingen dubletter
+duplicated(post1_sum$mzip)
+
+
+# indlæse bolig filen og rette den til
+boligrds <- readRDS("boligcl2 (1).rds")
+
+class(boligrds$pris)
+class(boligrds$kvm2)
+
+# fjerne overflødig tegn i "pris" kolonne og ændre til numerisk værdi
+boligrds$pris <- as.numeric(gsub("[\\. kr]", "", boligrds$pris))
+
+# ændre kvm2 til numerisk værdi
+boligrds$kvm2 <- as.numeric(boligrds$kvm2)
+
+# oprette en ny kolonne for kvm2 pris
+boligrds$kvm_pris <- round(boligrds$pris / boligrds$kvm2, 0)
+
+# udtrækker de kolonner vi gerner vil have fra boligrds
+bolig1 <- boligrds[, c("pris", "mzip","zipplace","kvm_pris")]
