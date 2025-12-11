@@ -1,0 +1,87 @@
+################################################
+# Opgave 4.1 – Stabilitetstest (base R)
+# data_for_regression: KVT, Realvækst, Indikator
+################################################
+
+# Hvor mange rækker er der i datasættet?
+n <- nrow(df_alligned)
+
+# Fjern de første 32 kvartaler
+df_no_first32 <- df_alligned[33:n, ]
+
+# Fjern de sidste 32 kvartaler
+df_no_last32  <- df_alligned[1:(n-32), ]
+
+################ df_no_first32 ################ 
+
+names(df_no_last32)
+# DST
+lm_DST_no_first32  <- lm(realvækst ~ Forbrugertillidsindikatoren,  data = df_no_first32)
+
+# DI
+lm_DI_no_first32   <- lm(realvækst ~ DI_forbrugertillid,   data = df_no_first32)
+
+# BEST
+lm_BEST_no_first32 <- lm(realvækst ~ best_indikator, data = df_no_first32)
+
+################ df_no_last32 ################ 
+
+# DST
+lm_DST_no_last32  <- lm(realvækst ~ Forbrugertillidsindikatoren,  data = df_no_last32)
+
+# DI
+lm_DI_no_last32   <- lm(realvækst ~ DI_forbrugertillid,   data = df_no_last32)
+
+# BEST
+lm_BEST_no_last32 <- lm(realvækst ~ best_indikator, data = df_no_last32)
+
+################ originale LM ################ 
+
+lm_DST <- lm(realvækst ~ Forbrugertillidsindikatoren,  data = df_alligned)
+lm_DI <- lm(realvækst ~ DI_forbrugertillid,  data = df_alligned)
+lm_Bedste <- lm(realvækst ~ best_indikator,  data = df_alligned)
+
+# df 
+R2_results <- data.frame(
+  Model = c(
+    "DST_no_first32",
+    "DI_no_first32",
+    "BEST_no_first32",
+    "DST_no_last32",
+    "DI_no_last32",
+    "BEST_no_last32",
+    "Org. DST",
+    "Org. DI",
+    "Org. Bedste"
+  ),
+  R2 = c(
+    summary(lm_DST_no_first32)$r.squared,
+    summary(lm_DI_no_first32)$r.squared,
+    summary(lm_BEST_no_first32)$r.squared,
+    summary(lm_DST_no_last32)$r.squared,
+    summary(lm_DI_no_last32)$r.squared,
+    summary(lm_BEST_no_last32)$r.squared,
+    summary(lm_DST)$r.squared,
+    summary(lm_DI)$r.squared,
+    summary(lm_Bedste)$r.squared
+  )
+)
+R2_results
+
+dst_df  <- R2_results[grep("DST",  R2_results$Model), ]
+di_df   <- R2_results[grep("DI",   R2_results$Model), ]
+best_df <- R2_results[grep("BEST|Bedste", R2_results$Model), ]
+
+dst_df  <- dst_df[order(-dst_df$R2), ]
+di_df   <- di_df[order(-di_df$R2), ]
+best_df <- best_df[order(-best_df$R2), ]
+
+dst_df$Group  <- "DST"
+di_df$Group   <- "DI"
+best_df$Group <- "BEST"
+
+R2_sorted_all <- rbind(dst_df, di_df, best_df)
+
+R2_sorted_all <- R2_sorted_all[, c("Group", "Model", "R2")]
+
+R2_sorted_all
