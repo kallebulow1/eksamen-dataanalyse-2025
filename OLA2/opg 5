@@ -1,0 +1,183 @@
+# Pakker
+library(dkstat)
+library(dplyr)
+library(tidyr)
+library(zoo)
+library(readr)
+library(lubridate)
+library(ggplot2)
+library(psych)
+library(corrplot)
+library(tibble)
+library(pls)
+library(stringr)
+library(pROC)
+library(reshape2)
+library(eurostat)
+library(restatapi)
+
+########################################################################################################################
+# Opgave 5.1 – Kvartalsvis årlig realvækst for en række Eurolande
+# Beregn den kvartalsvise årlige realvækst for husholdningernes forbrugsudgift for Danmark, Belgien,
+# Holland, Sverige, Østrig, Tyskland, Frankrig, Italien og Spanien i perioden 1. kvartal 2000 til og
+# med 2. kvartal 2024. I skal hente data vha. API’et fra Eurostat.
+########################################################################################################################
+
+# Hent kvartalsdata
+cons_q <- get_eurostat("namq_10_fcs", time_format = "num")
+lande <- c("DK","BE","NL","SE","AT","DE","FR","IT","ES")
+
+cons_real <- cons_q %>%
+  filter(geo %in% lande,
+         unit == "CP_MEUR",
+         s_adj == "SCA",
+         na_item == "P31_S14",
+         TIME_PERIOD >= 1999) %>%
+  arrange(geo, TIME_PERIOD)
+
+
+#laver ny kolonne med realvækst, sammenlign med samme kvartal året før, er vi steget eller faldet
+cons_growth <- cons_real %>%
+  group_by(geo) %>%
+  mutate(
+    yoy_growth = (values / lag(values, 4) - 1) * 100
+  ) %>%
+  ungroup()
+
+
+#slet de første fire linjer
+cons_growth <- cons_growth[-c(1:4), ]
+
+cons_growth <- cons_growth[!is.na(cons_growth$yoy_growth), ]
+
+# Liste med en dataframe pr. land
+land_dfs <- cons_growth %>%
+  group_split(geo)
+
+# Navngiv listen efter landene
+names(land_dfs) <- unique(cons_growth$geo)
+
+glimpse(land_dfs$DK)
+
+ggplot(cons_growth, aes(x = TIME_PERIOD, y = yoy_growth)) +
+  geom_line(color = "steelblue", linewidth = 0.8) +
+  facet_wrap(~ geo, scales = "free_y") +
+  labs(
+    title = "Årlig realvækst i husholdningernes forbrug – kvartalsvise data",
+    x = "År",
+    y = "Årlig vækst (%)"
+  ) +
+  theme_minimal(base_size = 12) +
+  theme(
+    strip.text = element_text(face = "bold"),
+    plot.title = element_text(face = "bold")
+  )
+
+########################################################################################################################
+# Opgave 5.2 – Højeste kvartalsvise årlige realvækst
+# Hvilket af de landene har gennemsnitligt haft den højeste kvartalsvise årlige realvækst i
+# husholdningernes forbrugsudgift i perioden 1. kvartal 2000 til 2. kvartal 2024.
+########################################################################################################################
+
+# Filtrer perioden 2000 Q1 - 2025 Q3
+result_euro <- cons_growth %>%
+  filter(TIME_PERIOD >= 2000.00, TIME_PERIOD <= 2025.75) %>%
+  group_by(geo) %>%
+  summarise(mean_growth = mean(yoy_growth, na.rm = TRUE)) %>%
+  arrange(desc(mean_growth))
+
+barplot(
+  result_euro$mean_growth,
+  names.arg = result_euro$geo,
+  las = 2,
+  main = "Spanien har i perioden (2000K1 - 2025K3) haft den bedste udvikling",
+  xlab = "Land",
+  ylab = "Gennemsnitlig årlig vækst (%)"
+)
+
+########################################################################################################################
+# Opgave 5.3 – Coronakrisen som outlier
+# Fjerne Coronakrisen fra jeres data og find igen den gennemsnitligt kvartalsvise realvækst i
+# husholdningernes forbrugsudgift i perioden 1. kvartal 2000 til 2. kvartal 2024. I hvilket af landene har
+# Coronakrisen haft en største effekt på den gennemsnitligt kvartalsvise realvækst.
+########################################################################################################################
+
+# Nyt datasæt uden coronaperioden
+cons_real_nocorona <- cons_real %>%
+  filter(TIME_PERIOD >= 1999.00, TIME_PERIOD <= 2025.75,
+         !(TIME_PERIOD >= 2020.00 & TIME_PERIOD <= 2022.00))
+
+#lav realvækst for det nye datasæt
+cons_real_nocorona <- cons_real_nocorona %>%
+  group_by(geo) %>%
+  arrange(TIME_PERIOD) %>%
+  mutate(yoy_growth = (values / lag(values, 4) - 1) * 100) %>%
+  ungroup()
+
+#slet rækker med 1999
+cons_real_nocorona <- cons_real_nocorona %>%
+  filter(TIME_PERIOD > 2000)
+
+# Find gennemsnitlig vækst pr. land i hele perioden
+realvækst_gns_nocorona <- cons_real_nocorona %>%
+  group_by(geo) %>%
+  summarise(mean_growth_nocorona = mean(yoy_growth, na.rm = TRUE)) %>%
+  arrange(desc(mean_growth_nocorona))
+
+
+#  Sammenlign forskellen
+corona_effect <- result_euro %>%
+  inner_join(realvækst_gns_nocorona, by = "geo") %>%
+  mutate(effect = mean_growth - mean_growth_nocorona,
+         effect_abs = abs(effect)) %>%
+  arrange(desc(effect_abs))
+
+########################################################################################################################
+# Opgave 5.4 – Effekt af Corona på forbruget
+# I hvilket europæiske land faldt den gennemsnitligt kvartalsvise realvækst i husholdningernes
+# forbrugsudgift, i perioden 1. kvartal 2020 til 2. kvartal 2024, mest?
+########################################################################################################################
+
+# 1) Filtrer rådata
+alle_lande <- cons_q %>%
+  filter(
+    unit == "CP_MEUR",
+    s_adj == "SCA",
+    na_item == "P31_S14",
+    TIME_PERIOD >= 1999
+  ) %>%
+  arrange(geo, TIME_PERIOD)
+
+# 2) Beregn YoY-vækst for hvert land
+alle_lande <- alle_lande %>%
+  group_by(geo) %>%
+  mutate(yoy_growth = (values / lag(values, 4) - 1) * 100) %>%
+  ungroup()
+
+# 3) Fjern det første år, hvor YoY ikke kan beregnes
+alle_lande <- alle_lande %>% filter(TIME_PERIOD >= 2000)
+
+# 4) Beregn gennemsnit 2020–2025 for hvert land
+#    Fjern euroområder og EU-totaler
+alle_lande2 <- alle_lande %>%
+  filter(
+    TIME_PERIOD >= 2020,
+    !is.na(yoy_growth),
+    !grepl("^EA|EU27", geo)
+  ) %>%
+  group_by(geo) %>%
+  summarise(mean_growth = mean(yoy_growth)) %>%
+  arrange(mean_growth)
+
+alle_lande2
+
+barplot(
+  alle_lande2$mean_growth,
+  names.arg = alle_lande2$geo,
+  las = 2,
+  main = "UK var hårdt ramt af Corona (2020 - 2025)",
+  xlab = "Land",
+  ylab = "Gennemsnitlig årlig vækst (%)"
+)
+
+save.image("OLA 2 opgave 5")
