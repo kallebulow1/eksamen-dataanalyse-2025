@@ -1,195 +1,274 @@
 
-#Opgave 3
+                    ######################### OPGAVE 4 ################################3
 
 
-# OPGAVE 3.1 – Hent fly og lav barplot
+# OPGAVE 4.1 – Hent fly over Nordsøen og plot pr. land
+
+library(httr)     # Forbindelsen til internettet
+library(jsonlite) #Oversætter
+library(ggplot2)
+source("util.R2.R") #Hjælpefunktion
+
+# Hent access token
+token <- getToken() #Util.R connection
+
+# Definér API og bounding box (Nordsøen)
+baseurl <- "https://opensky-network.org/api"
+endpoint <- "/states/all" #Filtrering
+
+lamin <- 52.055129
+lamax <- 56.196869
+lomin <- -6.065140
+lomax <- 4.305954
+
+# Byg URL
+url <- paste0(
+  baseurl, endpoint,
+  "?lamin=", lamin,
+  "&lomin=", lomin,
+  "&lamax=", lamax,
+  "&lomax=", lomax
+)
+# URL = ""https://opensky-network.org/api/states/all?lamin=52.055129&lomin=-6.06514&lamax=56.196869&lomax=4.305954""
+
+# Hent flydata
+res <- GET(url, add_headers(Authorization = paste("Bearer", token))) # Sender access token
+
+data <- fromJSON(content(res, as = "text")) # Henter body som tekst 
+
+# Konverter til data frame
+flights <- as.data.frame(data$states)
+
+colnames(flights) <- c(
+  "icao24","callsign","origin_country","time_position",
+  "last_contact","longitude","latitude","baro_altitude",
+  "on_ground","velocity","true_track","vertical_rate",
+  "sensors","geo_altitude","squawk","spi","position_source"
+)
 
 
-library(httr)        # Henter data via API
-library(jsonlite)    # Læser JSON-format
-library(ggplot2)     # Plot og visualisering
-source("util.R")     # Henter token-funktion
 
-token <- getToken()  # Henter API-nøgle
-baseurl <- "https://opensky-network.org/api"  # API-base
-endpointS <- "/states/all"                    # Endpoint for fly
-fullurl <- paste0(baseurl, endpointS,         # Sætter URL sammen
-                  "?lamin=52.055129&lomin=-6.065140&lamax=56.196869&lomax=4.305954")
+# Optæl antal fly pr. oprindelsesland
+flights_by_country <- as.data.frame(
+  table(flights$origin_country))
 
-res <- httr::GET(fullurl, add_headers(Authorization = paste("Bearer", token)))  # Kalder API’et
-resdata <- jsonlite::fromJSON(httr::content(res, as = "text"))                  # Læser svaret
+# Giv kolonnerne navne
+colnames(flights_by_country) <- c("Country", "Count")
 
-flydata <- as.data.frame(resdata$states)   # Laver data frame med fly
-colnames(flydata) <- c("icao24","callsign","origin_country","time_position",   # Kolonnenavne
-                       "last_contact","longitude","latitude","baro_altitude",
-                       "on_ground","velocity","true_track","vertical_rate",
-                       "sensors","geo_altitude","squawk","spi","position_source")
 
-fly_pr_land <- as.data.frame(table(flydata$origin_country))   # Tæller fly pr. land
-colnames(fly_pr_land) <- c("Land", "Antal")                   # Nye kolonnenavne
-
-ggplot(fly_pr_land, aes(x = reorder(Land, -Antal), y = Antal)) +  # Plot antal fly pr. land
-  geom_bar(stat = "identity", fill = "steelblue") +               # Søjlediagram
-  labs(title = "Antal fly over Nordsøen fordelt på lande",        # Titel og labels
-       x = "Land", y = "Antal fly") +
+# Barplot
+ggplot(flights_by_country, aes(x = reorder(Country, -Count), y = Count)) +
+  geom_col() +
+  labs(
+    title = "Antal fly over Nordsøen fordelt på lande",
+    x = "Land",
+    y = "Antal fly"
+  ) +
   theme_minimal() +
-  theme(axis.text.x = element_text(angle = 45, hjust = 1))        # Skrå labels
+  theme(axis.text.x = element_text(angle = 45, hjust = 1))
+
+# Gør plot pænere
+
+# Fjern lande med meget få fly (støj)
+flights_plot <- flights_by_country[flights_by_country$Count >= 3, ]
+
+# Barplot – renset og mere læsbar
+ggplot(flights_plot, aes(x = reorder(Country, Count), y = Count)) + # # Sorterer landene efter antal fly
+  geom_col(fill = "royalblue4") +
+  geom_text(aes(label = Count), hjust = -0.1, size = 3) +
+  coord_flip() + ## Vender akserne 
+  labs(
+    title = "Luftrummet over Nordsøen domineres af britiske fly",
+    subtitle = "Stor forskel mellem United Kingdom og øvrige lande",
+    x = "Land",
+    y = "Antal fly"
+  ) +
+  theme_minimal()
 
 
-# OPGAVE 3.2 – Sammenlign flyruter
 
-token <- getToken()  # Henter token igen
-endpointT <- "/tracks/all"   # Endpoint for flyruter
-url <- paste0(baseurl, endpointT, "?icao24=4400b3&time=0")  # Henter rute for ét fly
 
-res <- httr::GET(url, add_headers(Authorization = paste("Bearer", token)))  # Kalder API
-resretval <- jsonlite::fromJSON(httr::content(res, as = "text"))            # Læser svaret
+################################################3
 
-normalt_fly <- as.data.frame(resretval$path)      # Gemmer ruten som data frame
-colnames(normalt_fly) <- c("time", "lat", "lng", "alt", "hdg", "onGround")  # Kolonnenavne
 
-circ_fly <- readRDS("circjet6.rds")   # Indlæser cirklende fly fra fil
+# OPGAVE 4.2 - Sammenlign flyruter
 
-ggplot(statedf, aes(x = lng, y = lat)) +
+
+# Henter access token
+token <- getToken()
+
+# Definér API endpoint for historiske flyruter
+baseurl <- "https://opensky-network.org/api"
+endpoint <- "/tracks/all"# Filtrering
+
+# Vælger ét "normalt fly" (ICAO24)
+icao_normal <- "4400b3" #Iceland -> Milan (EasyJet)
+
+# Bygger URL og hent track-data
+url <- paste0(baseurl, endpoint, "?icao24=", icao_normal, "&time=0")
+
+# url = "https://opensky-network.org/api/tracks/all?icao24=4400b3&time=0"
+
+res <- GET(url, add_headers(Authorization = paste("Bearer", token))) # Sender access token
+data <- fromJSON(content(res, as = "text")) # Henter body som tekst
+
+# Gemmer ruten som data frame
+normal_flight <- as.data.frame(data$path)
+colnames(normal_flight) <- c("time", "lat", "lng", "alt", "heading", "onGround")
+
+# Indlæser cirklende fly (kendt træningsdata)
+
+circle_flight <- readRDS("circjet6.rds") #Wulf fil
+
+
+# Plot normalt fly
+ggplot(normal_flight, aes(x = lng, y = lat)) +
   geom_path(color = "blue") +
   theme_minimal() +
-  labs(title = "Flyrute for ICAO 4400b3",
-       x = "Længdegrad", y = "Breddegrad")
+  labs(
+    title = "Normal flyrute",
+    x = "Længdegrad",
+    y = "Breddegrad"
+  )
 
-
-circ_fly <- readRDS("circjet6.rds")
-
-ggplot(circ_fly, aes(x = lng, y = lat)) +
+# Plot cirklende fly
+ggplot(circle_flight, aes(x = lng, y = lat)) +
   geom_path(color = "red") +
   theme_minimal() +
-  labs(title = "Eksempel på cirklende fly",
-       x = "Længdegrad", y = "Breddegrad")
-
-
-# 3.3
-
-icaos <- flydata$icao24
-token <- getToken()
-
-library(httr)
-library(jsonlite)
-
-get_track <- function(icao) {
-  url <- paste0(
-    "https://opensky-network.org/api/tracks/all?",
-    "icao24=", icao,
-    "&time=0"
+  labs(
+    title = "Cirklende flyrute",
+    x = "Længdegrad",
+    y = "Breddegrad"
   )
-  
-  res <- GET(url, add_headers(Authorization = paste("Bearer", token)))
-  txt <- suppressWarnings(content(res, "text"))
-  
-}
 
-# 3.3
 
-icaos <- flydata$icao24
+##############################################
+
+
+# Opgave 4.3 – Move fast - alle fly 
+
+# Normale fly først
+
 token <- getToken()
+baseurl <- "https://opensky-network.org/api"
+endpoint <- "/tracks/all"
 
-length(icaos)
-head(icaos, 10)
+# Liste med friske ICAO-koder (fra opgave 4.1)
+icaos <- unique(flydata$icao24)
 
-
-library(httr)
-library(jsonlite)
-
-get_track <- function(icao) {
-  url <- paste0(
-    "https://opensky-network.org/api/tracks/all?",
-    "icao24=", icao,
-    "&time=0"
-  )
-  
-  res <- GET(url, add_headers(Authorization = paste("Bearer", token)))
-  txt <- suppressWarnings(content(res, "text"))
-  
-  if (nchar(txt) < 20) return(NULL)
-  
-  x <- tryCatch(fromJSON(txt), error = function(e) NULL)
-  if (is.null(x) || is.null(x$path)) return(NULL)
-  
-  df <- as.data.frame(x$path)
-  colnames(df) <- c("time", "lat", "lng", "alt", "hdg", "onGround")
-  
-  if (nrow(df) < 5) return(NULL)
-  
-  return(df)
-}
-
-# --- TRAINING: cirkelfly fra rds -----------------------------------------
-
-train_files <- list.files(pattern = "circjet.*\\.rds")
-
-train_results <- data.frame(
-  file = character(),
-  sd_course = numeric(),
+# Tomt data frame til resultater
+normal_results <- data.frame(
+  icao24 = character(),
+  sd_heading = numeric(),
   r_squared = numeric()
 )
 
-offical_ids <- c()
 
-for (f in train_files) {
-  df <- readRDS(f)
+# Loop over fly
+for (icao in icaos) {                                       # For hvert fly (ICAO-kode)
   
-  sd_course <- sd(df$crs, na.rm = TRUE)
-  r2 <- summary(lm(lat ~ lng, data = df))$r.squared
+  url <- paste0(baseurl, endpoint, "?icao24=", icao, "&time=0")
+  res <- GET(url, add_headers(Authorization = paste("Bearer", token)))
+  if (res$status_code != 200) next  # Springer fly over hvis API-kald fejler
   
-  train_results <- rbind(train_results, data.frame(
-    file = f,
-    sd_course = sd_course,
-    r_squared = r2
-  ))
+  data <- fromJSON(content(res, as = "text"))
+  if (is.null(data$path)) next   # Springer over hvis der ikke er track-data
   
-  offical_ids <- c(offical_ids, unique(df$icao24))
+  df <- as.data.frame(data$path)
+  colnames(df) <- c("time", "lat", "lng", "alt", "heading", "onGround")
+  if (nrow(df) < 10) next   # Sat en minimum observation grænse
+  
+  normal_results <- rbind(
+    normal_results,
+    data.frame(
+      icao24 = icao,
+      sd = sd(df$heading, na.rm = TRUE),
+      r_squared = summary(lm(lat ~ lng, data = df))$r.squared
+    )
+  )
 }
 
-offical_ids <- unique(offical_ids)
+# Træningsfly – cirklende fly (Wulf gav os)
 
+traning_files <- list.files(pattern = "^circjet.*\\.rds$")   #^Skal starte med, *kan stå noget bagefter \\ der er punktum og $ skal slutte med rds
 
-# --- 3.4: Egen algoritme --------------------------------------------------
-
-detect_circle <- function(sd_course, r2) {
-  if (is.na(sd_course) || is.na(r2)) return(0L)
-  if (sd_course > 40 && r2 > 0.7) return(1L)
-  return(0L)
-}
-
-results <- data.frame(
-  icao = character(),
-  sdcourse = numeric(),
-  lmres = numeric(),
-  myOwnAlg = integer(),
-  isOff = integer()
+cirkel_results <- data.frame(
+  file = character(),
+  sd_heading = numeric(),
+  r_squared = numeric()
 )
 
-# --- LOOP: hent alle ICAO og beregn --------------------------------------
+for (f in traning_files) { # For hver fil i listen (én rds-fil ad gangen)
+  
+  df <- readRDS(f)                        # Indlæs filen f som data frame
 
-for (id in icaos) {
-  
-  df <- get_track(id)
-  if (is.null(df)) next
-  
-  sd_course <- sd(df$hdg, na.rm = TRUE)
-  r2 <- summary(lm(lat ~ lng, data = df))$r.squared
-  
-  myAlg <- detect_circle(sd_course, r2)
-  
-  isOff <- ifelse(id %in% offical_ids, 1L, 0L)
-  
-  results <- rbind(results, data.frame(
-    icao = id,
-    sdcourse = sd_course,
-    lmres = r2,
-    myOwnAlg = myAlg,
-    isOff = isOff
-  ))
-  
-  print(paste("OK:", id))
+  cirkel_results <- rbind(
+    cirkel_results,
+    data.frame(
+      file = f,                           # Gem filnavnet (hvilket cirklende fly)
+      sd = sd(df$crs, na.rm = TRUE),   
+      r_squared = summary(lm(lat ~ lng, data = df))$r.squared  
+    )
+  )
 }
 
-results
+
+############################################################
+
+
+# Opgave 4.4 – Aim high - jeres egen algoritme 
+
+#Saml normale fly og cirklende træningsfly 
+
+results <- rbind(
+  data.frame(
+    icao = normal_results$icao24,     # Normale fly
+    sdcourse = normal_results$sd_heading,
+    isOff = 0                         # Ikke kendt cirklende
+  ),
+  data.frame(
+    icao = cirkel_results$file,       # Træningsfly (cirklende)
+    sdcourse = cirkel_results$sd_heading,
+    isOff = 1                         # Kendt cirklende
+  )
+)
+
+
+#Algortime
+
+threshold <- 60                      # Valgt grænse for cirklende fly
+
+results$myOwnAlg <- ifelse(
+  results$sdcourse > threshold, 1, 0
+)
+
+
+#Min egen algoritme v2
+
+detect_circle <- function(heading, threshold = 60) {
+  sd(heading, na.rm = TRUE) > threshold
+}
+
+results <- rbind(
+  data.frame(
+    icao = normal_results$icao24,
+    sdcourse = normal_results$sd_heading,
+    lmres = normal_results$r_squared,
+    myOwnAlg = ifelse(normal_results$sd_heading > 60, 1, 0),
+    isOff = 0
+  ),
+  data.frame(
+    icao = cirkel_results$file,
+    sdcourse = cirkel_results$sd_heading,
+    lmres = cirkel_results$r_squared,
+    myOwnAlg = ifelse(cirkel_results$sd_heading > 60, 1, 0),
+    isOff = 1
+  )
+)
+
+
+  
+
+
+
+
